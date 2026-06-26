@@ -27,6 +27,7 @@ import {
   HeadphonesIcon,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { BrandBackground } from "@/components/BrandBackground";
 import { NameModal } from "@/components/NameModal";
 
 export const Route = createFileRoute("/menu")({
@@ -78,26 +79,13 @@ function MenuPage() {
   ];
 
   return (
-    <div
-      className="relative min-h-screen w-full text-white"
-      style={{ background: "var(--gradient-brand)" }}
-    >
-      {/* decorative */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] opacity-40"
-        style={{
-          background:
-            "radial-gradient(60% 70% at 50% 0%, var(--brand-cyan) 0%, transparent 70%)",
-        }}
-      />
-
-      <header className="relative z-10 flex items-center justify-between px-5 pt-5">
+    <BrandBackground>
+      <header className="relative z-10 flex items-center justify-between px-5 pt-5 animate-slide-up-soft">
         <button
           type="button"
           aria-label="Abrir menú"
           onClick={() => setSidebarOpen(true)}
-          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-white/15 transition active:scale-95"
+          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-white/15 transition hover:bg-white/20 hover:scale-105 active:scale-95"
         >
           <MenuIcon className="h-5 w-5" />
         </button>
@@ -105,14 +93,14 @@ function MenuPage() {
           <button
             type="button"
             aria-label="Buscar"
-            className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-white/15 transition active:scale-95"
+            className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-white/15 transition hover:bg-white/20 hover:scale-105 active:scale-95"
           >
             <Search className="h-5 w-5" />
           </button>
           <button
             type="button"
             aria-label="Idioma"
-            className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-white/15 transition active:scale-95"
+            className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-white/15 transition hover:bg-white/20 hover:scale-105 active:scale-95"
           >
             <Languages className="h-5 w-5" />
           </button>
@@ -122,26 +110,28 @@ function MenuPage() {
       {/* Centered logo block */}
       <section className="relative z-10 mt-6 flex flex-col items-center px-6">
         <BrandLogo size={170} />
-        <h1 className="mt-4 text-xl font-bold tracking-wide">
+        <h1 className="mt-4 text-2xl font-extrabold tracking-wide animate-slide-up-soft" style={{ animationDelay: "0.15s" }}>
           Lotería <span className="text-[color:var(--brand-cyan)]">La Garza</span>
         </h1>
         <button
           type="button"
           onClick={() => setEditName(true)}
-          className="mt-1 text-sm text-white/70 hover:text-white"
+          className="mt-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 ring-1 ring-white/15 transition hover:bg-white/20 animate-slide-up-soft"
+          style={{ animationDelay: "0.25s" }}
         >
-          Hola, <span className="font-semibold text-white">{name}</span>
+          👋 Hola, <span className="font-semibold text-white">{name}</span>
         </button>
       </section>
 
-      <main className="relative z-10 mx-auto mt-8 w-full max-w-md space-y-6 px-5 pb-10">
-        <CardStack title="Jugar" cards={primaryActions} />
-        <CardStack title="Más" cards={secondaryActions} />
+      <main className="relative z-10 mx-auto mt-8 w-full max-w-md space-y-7 px-5 pb-10">
+        <CardStack title="Jugar" cards={primaryActions} startDelay={0.3} />
+        <CardStack title="Más" cards={secondaryActions} startDelay={0.6} />
 
         <button
           type="button"
           onClick={() => navigate({ to: "/" })}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 text-sm font-semibold text-white/90 backdrop-blur transition active:scale-[0.98]"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-white/10 active:scale-[0.98] animate-slide-up-soft"
+          style={{ animationDelay: "0.9s" }}
         >
           <LogOut className="h-4 w-4" /> Cerrar sesión
         </button>
@@ -165,34 +155,53 @@ function MenuPage() {
           setEditName(false);
         }}
       />
-    </div>
+    </BrandBackground>
   );
 }
 
-function CardStack({ title, cards }: { title: string; cards: ActionCard[] }) {
+function CardStack({ title, cards, startDelay = 0 }: { title: string; cards: ActionCard[]; startDelay?: number }) {
   return (
     <section>
-      <h2 className="mb-3 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+      <h2
+        className="mb-3 flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/70 animate-slide-up-soft"
+        style={{ animationDelay: `${startDelay}s` }}
+      >
+        <span className="h-px w-6 bg-white/40" />
         {title}
+        <span className="h-px flex-1 bg-white/15" />
       </h2>
       <div className="space-y-3">
-        {cards.map((card) => {
+        {cards.map((card, idx) => {
           const Icon = card.icon;
           return (
             <button
               key={card.label}
               type="button"
               onClick={card.onClick}
-              className="group flex h-16 w-full items-center gap-4 rounded-2xl bg-white/8 px-3 text-left ring-1 ring-white/10 backdrop-blur transition active:scale-[0.99] hover:bg-white/12"
+              className="group relative flex h-16 w-full items-center gap-4 overflow-hidden rounded-full px-3 pr-5 text-left text-white shadow-[var(--shadow-card)] ring-1 ring-white/25 transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.55)] active:scale-[0.98] animate-slide-up-soft"
+              style={{
+                background: card.gradient,
+                animationDelay: `${startDelay + 0.08 * (idx + 1)}s`,
+              }}
             >
+              {/* glossy top highlight */}
               <span
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white shadow-[var(--shadow-card)]"
-                style={{ background: card.gradient }}
-              >
+                aria-hidden
+                className="pointer-events-none absolute inset-x-3 top-1 h-3 rounded-full bg-white/30 blur-[2px]"
+              />
+              {/* shimmer sweep */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-12 bg-gradient-to-r from-transparent via-white/35 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                style={{ animation: "shimmer-x 2.4s ease-in-out infinite" }}
+              />
+              <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white/95 text-[color:var(--brand-navy-deep)] shadow-inner ring-2 ring-white/60 transition group-hover:scale-105 group-hover:rotate-[-4deg]">
                 <Icon className="h-5 w-5" />
               </span>
-              <span className="flex-1 text-[15px] font-semibold">{card.label}</span>
-              <ChevronRight className="h-5 w-5 text-white/50 transition group-hover:translate-x-0.5 group-hover:text-white/80" />
+              <span className="relative flex-1 text-[15px] font-bold drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]">
+                {card.label}
+              </span>
+              <ChevronRight className="relative h-5 w-5 text-white/85 transition group-hover:translate-x-1" />
             </button>
           );
         })}
