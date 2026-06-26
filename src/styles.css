@@ -63,25 +63,43 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  /* Brand palette inspired by Lotería La Garza logo */
+  --brand-navy: oklch(0.28 0.13 260);
+  --brand-navy-deep: oklch(0.20 0.12 262);
+  --brand-navy-dark: oklch(0.14 0.09 262);
+  --brand-cyan: oklch(0.82 0.09 220);
+  --brand-pink: oklch(0.68 0.25 0);
+  --brand-gold: oklch(0.82 0.16 85);
+  --brand-teal: oklch(0.72 0.13 190);
+
+  --background: oklch(0.98 0.01 240);
+  --foreground: oklch(0.18 0.08 262);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
+  --card-foreground: oklch(0.18 0.08 262);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --popover-foreground: oklch(0.18 0.08 262);
+  --primary: var(--brand-navy-deep);
+  --primary-foreground: oklch(0.99 0.005 240);
+  --secondary: var(--brand-cyan);
+  --secondary-foreground: var(--brand-navy-dark);
+  --muted: oklch(0.94 0.02 240);
+  --muted-foreground: oklch(0.45 0.05 260);
+  --accent: var(--brand-pink);
+  --accent-foreground: oklch(0.99 0.005 240);
+  --destructive: oklch(0.6 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.88 0.03 240);
+  --input: oklch(0.92 0.02 240);
+  --ring: var(--brand-cyan);
+
+  --gradient-brand: linear-gradient(160deg, oklch(0.32 0.14 258) 0%, oklch(0.18 0.12 262) 60%, oklch(0.12 0.09 262) 100%);
+  --gradient-card-pink: linear-gradient(135deg, oklch(0.72 0.22 5), oklch(0.62 0.24 355));
+  --gradient-card-cyan: linear-gradient(135deg, oklch(0.78 0.13 200), oklch(0.55 0.14 220));
+  --gradient-card-teal: linear-gradient(135deg, oklch(0.78 0.13 185), oklch(0.55 0.14 200));
+  --gradient-card-gold: linear-gradient(135deg, oklch(0.86 0.17 90), oklch(0.72 0.18 70));
+  --shadow-brand: 0 10px 30px -10px oklch(0.18 0.12 262 / 0.45);
+  --shadow-card: 0 6px 18px -6px oklch(0.18 0.12 262 / 0.35);
+
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
