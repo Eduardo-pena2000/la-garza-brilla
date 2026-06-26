@@ -26,25 +26,28 @@ function LoginPage() {
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-10 pt-16">
         <BrandLogo size={220} />
 
-        <h1 className="mt-6 text-center text-2xl font-bold tracking-wide">
+        <h1 className="mt-6 text-center text-3xl font-extrabold tracking-wide animate-slide-up-soft" style={{ animationDelay: "0.2s" }}>
           Lotería <span className="text-[color:var(--brand-cyan)]">La Garza</span>
         </h1>
-        <p className="mt-1 text-center text-sm text-white/70">
+        <p className="mt-1 text-center text-sm text-white/70 animate-slide-up-soft" style={{ animationDelay: "0.3s" }}>
           Reúne a tu gente y juega online
         </p>
 
         <div className="mt-10 flex w-full flex-col gap-3">
           <button
             type="button"
-            className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-white text-[15px] font-semibold text-[color:var(--brand-navy-dark)] shadow-[var(--shadow-card)] transition active:scale-[0.98]"
+            className="group relative flex h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-white text-[15px] font-semibold text-[color:var(--brand-navy-dark)] shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.5)] active:scale-[0.98] animate-slide-up-soft"
+            style={{ animationDelay: "0.45s" }}
             onClick={() => setAskName(true)}
           >
+            <span aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-12 bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" style={{ animation: "shimmer-x 2.4s ease-in-out infinite" }} />
             <GoogleIcon className="h-5 w-5" />
             Iniciar sesión con Google
           </button>
           <button
             type="button"
-            className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-black text-[15px] font-semibold text-white shadow-[var(--shadow-card)] transition active:scale-[0.98]"
+            className="relative flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-black text-[15px] font-semibold text-white shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.6)] active:scale-[0.98] animate-slide-up-soft"
+            style={{ animationDelay: "0.55s" }}
             onClick={() => setAskName(true)}
           >
             <AppleIcon className="h-5 w-5" />
@@ -52,7 +55,8 @@ function LoginPage() {
           </button>
           <button
             type="button"
-            className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-white/15 bg-white/5 text-[15px] font-semibold text-white backdrop-blur-sm transition active:scale-[0.98]"
+            className="relative flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-white/15 bg-white/10 text-[15px] font-semibold text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/15 active:scale-[0.98] animate-slide-up-soft"
+            style={{ animationDelay: "0.65s" }}
             onClick={() => setAskName(true)}
           >
             <User className="h-5 w-5" />
@@ -60,7 +64,7 @@ function LoginPage() {
           </button>
         </div>
 
-        <p className="mt-auto pt-10 text-center text-xs text-white/60">
+        <p className="mt-auto pt-10 text-center text-xs text-white/60 animate-slide-up-soft" style={{ animationDelay: "0.85s" }}>
           Al usar la aplicación aceptas nuestros{" "}
           <span className="underline">Términos de uso</span> y{" "}
           <span className="underline">Política de privacidad</span>
