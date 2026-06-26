@@ -18,10 +18,16 @@ export function NameModal({ open, onClose, onSave, initial = "" }: NameModalProp
   if (!open) return null;
 
   const trimmed = value.trim();
-  const canSave = trimmed.length > 0;
+  const finalName = trimmed.length > 0 ? trimmed : "Invitado";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-8 pt-16 backdrop-blur-sm sm:items-center sm:pb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
+      <button
+        type="button"
+        aria-label="Cerrar"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default"
+      />
       <div className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white text-[color:var(--brand-navy-dark)] shadow-2xl">
         <button
           type="button"
@@ -71,12 +77,11 @@ export function NameModal({ open, onClose, onSave, initial = "" }: NameModalProp
 
           <button
             type="button"
-            disabled={!canSave}
-            onClick={() => canSave && onSave(trimmed)}
-            className="mt-5 flex h-12 w-full items-center justify-center rounded-2xl text-base font-semibold text-white shadow-[var(--shadow-card)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => onSave(finalName)}
+            className="mt-5 flex h-12 w-full items-center justify-center rounded-2xl text-base font-semibold text-white shadow-[var(--shadow-card)] transition active:scale-[0.98]"
             style={{ background: "var(--gradient-brand)" }}
           >
-            Guardar
+            {trimmed.length > 0 ? "Guardar y continuar" : "Continuar como Invitado"}
           </button>
         </div>
       </div>
