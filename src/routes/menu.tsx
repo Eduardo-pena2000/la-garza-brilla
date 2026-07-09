@@ -65,7 +65,7 @@ function MenuPage() {
   }, []);
 
   const primaryActions: ActionCard[] = [
-    { label: "Mis tablas", icon: LayoutGrid, gradient: "var(--gradient-card-cyan)" },
+    { label: "Mis tablas", icon: LayoutGrid, gradient: "var(--gradient-card-cyan)", onClick: () => navigate({ to: "/tablas" }) },
     { label: "Abrir mesa", icon: PlusCircle, gradient: "var(--gradient-card-pink)" },
     { label: "Mesas Públicas", icon: Users, gradient: "var(--gradient-card-teal)" },
     { label: "Jugar Offline", icon: WifiOff, gradient: "var(--gradient-card-cyan)" },
