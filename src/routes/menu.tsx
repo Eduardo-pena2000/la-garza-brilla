@@ -263,14 +263,7 @@ function Sidebar({
           </div>
         </nav>
 
-        <div className="border-t border-[color:var(--border)] p-3">
-          <button
-            type="button"
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--brand-gold)] text-sm font-semibold text-[color:var(--brand-navy-dark)] shadow-sm active:scale-[0.98]"
-          >
-            <Star className="h-4 w-4" /> Calificar App
-          </button>
-        </div>
+        <div className="border-t border-[color:var(--border)] p-3" />
       </aside>
     </div>
   );
