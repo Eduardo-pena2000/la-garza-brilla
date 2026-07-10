@@ -2,15 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   Settings,
-  Layers,
-  Compass,
-  Ban,
-  Trophy,
-  BarChart3,
-  Star,
-  Link2,
-  Facebook,
-  Trash2,
   Info,
   LogOut,
   Search,
@@ -20,11 +11,7 @@ import {
   LayoutGrid,
   PlusCircle,
   Users,
-  WifiOff,
-  Gamepad2,
-  Dices,
   ShieldOff,
-  HeadphonesIcon,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { BrandBackground } from "@/components/BrandBackground";
@@ -64,18 +51,11 @@ function MenuPage() {
     }
   }, []);
 
-  const primaryActions: ActionCard[] = [
-    { label: "Mis tablas", icon: LayoutGrid, gradient: "var(--gradient-card-cyan)", onClick: () => navigate({ to: "/tablas" }) },
-    { label: "Abrir mesa", icon: PlusCircle, gradient: "var(--gradient-card-pink)", onClick: () => navigate({ to: "/abrir-mesa" }) },
-    { label: "Mesas Públicas", icon: Users, gradient: "var(--gradient-card-teal)" },
-    { label: "Jugar Offline", icon: WifiOff, gradient: "var(--gradient-card-cyan)" },
-  ];
-
-  const secondaryActions: ActionCard[] = [
-    { label: "Baraja Lotería", icon: Gamepad2, gradient: "var(--gradient-card-gold)" },
-    { label: "Bingo Online", icon: Dices, gradient: "var(--gradient-card-pink)" },
-    { label: "Quitar Publicidad", icon: ShieldOff, gradient: "var(--gradient-card-gold)" },
-    { label: "¿Necesitas ayuda?", icon: HeadphonesIcon, gradient: "var(--gradient-card-teal)" },
+  const actions: ActionCard[] = [
+    { label: "Crear mesa", icon: PlusCircle, gradient: "var(--gradient-card-pink)", onClick: () => navigate({ to: "/abrir-mesa" }) },
+    { label: "Unirse a mesa pública", icon: Users, gradient: "var(--gradient-card-teal)" },
+    { label: "Mis barajas", icon: LayoutGrid, gradient: "var(--gradient-card-cyan)", onClick: () => navigate({ to: "/tablas" }) },
+    { label: "Quitar publicidad", icon: ShieldOff, gradient: "var(--gradient-card-gold)" },
   ];
 
   return (
@@ -124,8 +104,16 @@ function MenuPage() {
       </section>
 
       <main className="relative z-10 mx-auto mt-8 w-full max-w-md space-y-7 px-5 pb-10">
-        <CardStack title="Jugar" cards={primaryActions} startDelay={0.3} />
-        <CardStack title="Más" cards={secondaryActions} startDelay={0.6} />
+        <CardStack title="Jugar" cards={actions} startDelay={0.3} />
+
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/configuracion" })}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-white/10 active:scale-[0.98] animate-slide-up-soft"
+          style={{ animationDelay: "0.8s" }}
+        >
+          <Settings className="h-4 w-4" /> Configuración
+        </button>
 
         <button
           type="button"
@@ -219,17 +207,16 @@ function Sidebar({
   onClose: () => void;
   onEditName: () => void;
 }) {
-  const items: { label: string; icon: IconType }[] = [
-    { label: "Configuración", icon: Settings },
-    { label: "Barajas Personalizadas", icon: Layers },
-    { label: "Explorador de Modos", icon: Compass },
-    { label: "Usuarios bloqueados", icon: Ban },
-    { label: "Historial", icon: Trophy },
-    { label: "Clasificación", icon: BarChart3 },
-    { label: "Logros", icon: Star },
-    { label: "Unir por link", icon: Link2 },
-    { label: "Síguenos en Facebook", icon: Facebook },
-    { label: "Eliminar cuenta", icon: Trash2 },
+  const navigate = useNavigate();
+  const items: { label: string; icon: IconType; onClick?: () => void }[] = [
+    {
+      label: "Configuración",
+      icon: Settings,
+      onClick: () => {
+        onClose();
+        navigate({ to: "/configuracion" });
+      },
+    },
   ];
 
   return (
@@ -265,10 +252,11 @@ function Sidebar({
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2">
-          {items.map(({ label, icon: Icon }) => (
+          {items.map(({ label, icon: Icon, onClick }) => (
             <button
               key={label}
               type="button"
+              onClick={onClick}
               className="flex w-full items-center gap-3 px-5 py-3 text-left text-sm font-medium text-[color:var(--brand-navy-dark)] transition hover:bg-[color:var(--muted)]"
             >
               <Icon className="h-5 w-5 text-[color:var(--brand-navy-deep)]" />
@@ -284,14 +272,7 @@ function Sidebar({
           </div>
         </nav>
 
-        <div className="border-t border-[color:var(--border)] p-3">
-          <button
-            type="button"
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--brand-gold)] text-sm font-semibold text-[color:var(--brand-navy-dark)] shadow-sm active:scale-[0.98]"
-          >
-            <Star className="h-4 w-4" /> Calificar App
-          </button>
-        </div>
+        <div className="border-t border-[color:var(--border)] p-3" />
       </aside>
     </div>
   );
