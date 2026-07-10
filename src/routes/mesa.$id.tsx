@@ -146,6 +146,7 @@ function MesaPage() {
     const updated: Mesa = { ...mesa, status: "en-juego" };
     setMesa(updated);
     saveMesa(updated);
+    navigate({ to: "/mesa/$id/jugar", params: { id: mesa.id } });
   }
 
   if (loading) {
