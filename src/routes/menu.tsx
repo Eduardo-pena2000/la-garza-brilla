@@ -207,8 +207,16 @@ function Sidebar({
   onClose: () => void;
   onEditName: () => void;
 }) {
-  const items: { label: string; icon: IconType }[] = [
-    { label: "Configuración", icon: Settings },
+  const navigate = useNavigate();
+  const items: { label: string; icon: IconType; onClick?: () => void }[] = [
+    {
+      label: "Configuración",
+      icon: Settings,
+      onClick: () => {
+        onClose();
+        navigate({ to: "/configuracion" });
+      },
+    },
   ];
 
   return (
@@ -244,10 +252,11 @@ function Sidebar({
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2">
-          {items.map(({ label, icon: Icon }) => (
+          {items.map(({ label, icon: Icon, onClick }) => (
             <button
               key={label}
               type="button"
+              onClick={onClick}
               className="flex w-full items-center gap-3 px-5 py-3 text-left text-sm font-medium text-[color:var(--brand-navy-dark)] transition hover:bg-[color:var(--muted)]"
             >
               <Icon className="h-5 w-5 text-[color:var(--brand-navy-deep)]" />
