@@ -246,6 +246,7 @@ function AbrirMesaPage() {
         <SuccessOverlay
           mesaName={createdMesa.name}
           host={hostName || "Anfitrión"}
+          onGoMesa={() => navigate({ to: "/mesa/$id", params: { id: createdMesa.id } })}
           onClose={() => navigate({ to: "/menu" })}
         />
       )}
@@ -287,10 +288,12 @@ function SuccessOverlay({
   mesaName,
   host,
   onClose,
+  onGoMesa,
 }: {
   mesaName: string;
   host: string;
   onClose: () => void;
+  onGoMesa: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-[oklch(0.08_0.09_262)/.75] px-6 backdrop-blur-md">
@@ -309,9 +312,16 @@ function SuccessOverlay({
         </p>
         <button
           type="button"
-          onClick={onClose}
+          onClick={onGoMesa}
           className="mt-5 h-12 w-full rounded-full text-sm font-bold text-white shadow-[var(--shadow-card)] ring-1 ring-white/25 transition hover:-translate-y-0.5 active:scale-[0.98]"
           style={{ background: "var(--gradient-brand)" }}
+        >
+          Entrar a la mesa
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-2 h-11 w-full rounded-full text-sm font-semibold text-white/80 ring-1 ring-white/15 transition hover:bg-white/10"
         >
           Ir al menú
         </button>
