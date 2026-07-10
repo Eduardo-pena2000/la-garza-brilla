@@ -15,6 +15,8 @@ import {
   LayoutGrid,
   Sparkles,
   PlusCircle,
+  PartyPopper,
+  AlertCircle,
 } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
 
@@ -40,6 +42,7 @@ interface Tabla {
 
 const TABLAS_KEY = "garza:tablas";
 const MESAS_KEY = "garza:mesas";
+const NAME_KEY = "garza:name";
 
 function loadTablas(): Tabla[] {
   try {
@@ -74,9 +77,17 @@ function AbrirMesaPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [tablas, setTablas] = useState<Tabla[]>([]);
+  const [hostName, setHostName] = useState<string>("");
+  const [createdMesa, setCreatedMesa] = useState<null | { name: string; id: string }>(null);
+  const [error, setError] = useState<string>("");
 
   useEffect(() => {
     setTablas(loadTablas());
+    try {
+      setHostName(localStorage.getItem(NAME_KEY) ?? "");
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const filteredTablas = useMemo(() => tablas.filter((t) => t.size === size), [tablas, size]);
@@ -100,6 +111,17 @@ function AbrirMesaPage() {
   }
 
   function finish() {
+    if (selected.length !== perPlayer) {
+      setError(`Selecciona ${perPlayer} tabla${perPlayer === 1 ? "" : "s"} para continuar.`);
+      return;
+    }
+    const orderedTablas = selected
+      .map((id) => tablas.find((t) => t.id === id))
+      .filter((t): t is Tabla => Boolean(t));
+    if (orderedTablas.length !== perPlayer) {
+      setError("Alguna tabla ya no existe. Vuelve al paso anterior.");
+      return;
+    }
     const mesa = {
       id: crypto.randomUUID(),
       name: name.trim(),
@@ -109,6 +131,9 @@ function AbrirMesaPage() {
       locked,
       password: locked ? password : "",
       tablaIds: selected,
+      host: hostName || "Anfitrión",
+      players: hostName ? [{ name: hostName, role: "host" as const }] : [],
+      status: "abierta" as const,
       createdAt: Date.now(),
     };
     try {
@@ -117,9 +142,11 @@ function AbrirMesaPage() {
       list.unshift(mesa);
       localStorage.setItem(MESAS_KEY, JSON.stringify(list));
     } catch {
-      /* ignore */
+      setError("No se pudo guardar la mesa. Intenta de nuevo.");
+      return;
     }
-    navigate({ to: "/menu" });
+    setError("");
+    setCreatedMesa({ id: mesa.id, name: mesa.name });
   }
 
   function toggleSelect(id: string) {
@@ -206,7 +233,22 @@ function AbrirMesaPage() {
             onGoTablas={() => navigate({ to: "/tablas" })}
           />
         )}
+
+      {step === 4 && error && (
+        <div className="mt-4 flex items-start gap-2 rounded-2xl bg-[color:var(--brand-pink)/.15] px-4 py-3 text-sm text-white ring-1 ring-[color:var(--brand-pink)/.4]">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--brand-pink)]" />
+          <span>{error}</span>
+        </div>
+      )}
       </main>
+
+      {createdMesa && (
+        <SuccessOverlay
+          mesaName={createdMesa.name}
+          host={hostName || "Anfitrión"}
+          onClose={() => navigate({ to: "/menu" })}
+        />
+      )}
 
       {/* Bottom action bar */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[oklch(0.10_0.09_262)/.85] px-5 pb-5 pt-3 backdrop-blur-xl">
@@ -238,6 +280,43 @@ function AbrirMesaPage() {
         </div>
       </div>
     </BrandBackground>
+  );
+}
+
+function SuccessOverlay({
+  mesaName,
+  host,
+  onClose,
+}: {
+  mesaName: string;
+  host: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-[oklch(0.08_0.09_262)/.75] px-6 backdrop-blur-md">
+      <div className="animate-slide-up-soft w-full max-w-sm overflow-hidden rounded-3xl bg-white/10 p-6 text-center ring-1 ring-white/20 shadow-[var(--shadow-card)] backdrop-blur-xl">
+        <div
+          className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl text-white shadow-[var(--shadow-card)]"
+          style={{ background: "var(--gradient-brand)" }}
+        >
+          <PartyPopper className="h-7 w-7" />
+        </div>
+        <h3 className="text-lg font-extrabold text-white">¡Mesa creada!</h3>
+        <p className="mt-1 text-sm text-white/75">
+          <span className="font-semibold text-white">{mesaName}</span>
+          <br />
+          Anfitrión: <span className="text-[color:var(--brand-cyan)]">{host}</span>
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 h-12 w-full rounded-full text-sm font-bold text-white shadow-[var(--shadow-card)] ring-1 ring-white/25 transition hover:-translate-y-0.5 active:scale-[0.98]"
+          style={{ background: "var(--gradient-brand)" }}
+        >
+          Ir al menú
+        </button>
+      </div>
+    </div>
   );
 }
 
