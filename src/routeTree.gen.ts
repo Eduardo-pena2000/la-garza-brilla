@@ -14,6 +14,7 @@ import { Route as MenuRouteImport } from './routes/menu'
 import { Route as AbrirMesaRouteImport } from './routes/abrir-mesa'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MesaIdRouteImport } from './routes/mesa.$id'
+import { Route as MesaIdIndexRouteImport } from './routes/mesa.$id.index'
 import { Route as MesaIdJugarRouteImport } from './routes/mesa.$id.jugar'
 
 const TablasRoute = TablasRouteImport.update({
@@ -41,6 +42,11 @@ const MesaIdRoute = MesaIdRouteImport.update({
   path: '/mesa/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MesaIdIndexRoute = MesaIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MesaIdRoute,
+} as any)
 const MesaIdJugarRoute = MesaIdJugarRouteImport.update({
   id: '/jugar',
   path: '/jugar',
@@ -54,14 +60,15 @@ export interface FileRoutesByFullPath {
   '/tablas': typeof TablasRoute
   '/mesa/$id': typeof MesaIdRouteWithChildren
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
+  '/mesa/$id/': typeof MesaIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/abrir-mesa': typeof AbrirMesaRoute
   '/menu': typeof MenuRoute
   '/tablas': typeof TablasRoute
-  '/mesa/$id': typeof MesaIdRouteWithChildren
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
+  '/mesa/$id': typeof MesaIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,6 +78,7 @@ export interface FileRoutesById {
   '/tablas': typeof TablasRoute
   '/mesa/$id': typeof MesaIdRouteWithChildren
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
+  '/mesa/$id/': typeof MesaIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -81,14 +89,15 @@ export interface FileRouteTypes {
     | '/tablas'
     | '/mesa/$id'
     | '/mesa/$id/jugar'
+    | '/mesa/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/abrir-mesa'
     | '/menu'
     | '/tablas'
-    | '/mesa/$id'
     | '/mesa/$id/jugar'
+    | '/mesa/$id'
   id:
     | '__root__'
     | '/'
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/tablas'
     | '/mesa/$id'
     | '/mesa/$id/jugar'
+    | '/mesa/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -144,6 +154,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MesaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mesa/$id/': {
+      id: '/mesa/$id/'
+      path: '/'
+      fullPath: '/mesa/$id/'
+      preLoaderRoute: typeof MesaIdIndexRouteImport
+      parentRoute: typeof MesaIdRoute
+    }
     '/mesa/$id/jugar': {
       id: '/mesa/$id/jugar'
       path: '/jugar'
@@ -156,10 +173,12 @@ declare module '@tanstack/react-router' {
 
 interface MesaIdRouteChildren {
   MesaIdJugarRoute: typeof MesaIdJugarRoute
+  MesaIdIndexRoute: typeof MesaIdIndexRoute
 }
 
 const MesaIdRouteChildren: MesaIdRouteChildren = {
   MesaIdJugarRoute: MesaIdJugarRoute,
+  MesaIdIndexRoute: MesaIdIndexRoute,
 }
 
 const MesaIdRouteWithChildren =
