@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
 
-export const Route = createFileRoute("/mesa/$id")({
+export const Route = createFileRoute("/mesa/$id/")({
   head: () => ({
     meta: [
       { title: "Mesa — Lotería La Garza" },
