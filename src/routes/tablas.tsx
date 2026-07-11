@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Plus, LayoutGrid, Trash2, Pencil, Sparkles } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
+import { DECK, getCard } from "@/lib/deck";
 
 export const Route = createFileRoute("/tablas")({
   head: () => ({
@@ -222,36 +223,16 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
   );
 }
 
-const CARD_PALETTE = [
-  "linear-gradient(135deg, #ff8a5c, #ff5a86)",
-  "linear-gradient(135deg, #4ac6ff, #6a5cff)",
-  "linear-gradient(135deg, #ffd45c, #ff8a3c)",
-  "linear-gradient(135deg, #5cffb0, #12b8a3)",
-  "linear-gradient(135deg, #ff6bd5, #a855f7)",
-  "linear-gradient(135deg, #64d2ff, #0a84ff)",
-];
-
-const CARD_EMOJIS = [
-  "🌵","🎺","🌶️","🎲","🪅","⭐","🌙","🌞","🌹","🍉",
-  "🐸","🌴","💃","☂️","🍐","👢","🦐","🌲","🏹","🫀",
-  "🖐️","🦌","🦜","🎩","🐓","👑","🍎","🐟","🎻","🦂",
-  "🌰","🌽","🎭","🎪","🎯","🎨","🎬","🎤","🎧","🎹",
-  "🥁","🎸","🎼","🎳","🏆","🥇","🥈","🥉","🎖️","🏅",
-  "🎗️","🎀","🎁","🎊",
-];
-
 function CardTile({ n }: { n: number }) {
-  const bg = CARD_PALETTE[n % CARD_PALETTE.length];
-  const emoji = CARD_EMOJIS[(n - 1) % CARD_EMOJIS.length];
+  const card = getCard(n);
   return (
-    <div
-      className="relative flex aspect-[3/4] items-center justify-center overflow-hidden rounded-md text-lg"
-      style={{ background: bg }}
-    >
-      <span className="absolute left-0.5 top-0 text-[7px] font-bold text-white/90">
-        {n}
-      </span>
-      <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">{emoji}</span>
+    <div className="relative aspect-[3/4] overflow-hidden rounded-md">
+      <img
+        src={card?.image}
+        alt={card?.name ?? `Carta ${n}`}
+        loading="lazy"
+        className="h-full w-full object-cover"
+      />
     </div>
   );
 }

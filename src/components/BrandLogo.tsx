@@ -1,4 +1,3 @@
-import logoAsset from "@/assets/logo-garza.jpg.asset.json";
 
 interface BrandLogoProps {
   size?: number;
@@ -26,7 +25,7 @@ export function BrandLogo({ size = 160, className = "", glow = true }: BrandLogo
         </>
       )}
       <img
-        src={logoAsset.url}
+        src="/logo-garza.jpg"
         alt="Lotería La Garza"
         width={size}
         height={size}

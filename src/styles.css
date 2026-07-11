@@ -179,6 +179,10 @@
   0% { transform: translateY(24px); opacity: 0; }
   100% { transform: translateY(0); opacity: 1; }
 }
+@keyframes slide-in-left {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(0); }
+}
 @keyframes shimmer-x {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(220%); }
@@ -201,6 +205,7 @@
 @utility animate-float-lg { animation: float-y-lg 6s ease-in-out infinite; }
 @utility animate-pop-in { animation: pop-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 @utility animate-slide-up-soft { animation: slide-up-soft 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@utility animate-slide-in-left { animation: slide-in-left 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
 @utility animate-pulse-ring { animation: pulse-ring 2.2s ease-out infinite; }
 @utility animate-gradient-shift {
   background-size: 200% 200%;
@@ -224,4 +229,14 @@
   );
   animation: shimmer-x 3.5s ease-in-out infinite;
   pointer-events: none;
+}
+
+@keyframes scratch-hand {
+  0%, 100% { transform: translate(-50%, -100%) rotate(0deg); }
+  25% { transform: translate(-55%, -95%) rotate(-5deg); }
+  50% { transform: translate(-50%, -105%) rotate(0deg); }
+  75% { transform: translate(-45%, -95%) rotate(5deg); }
+}
+.animate-scratch-hand {
+  animation: scratch-hand 0.15s ease-in-out infinite;
 }

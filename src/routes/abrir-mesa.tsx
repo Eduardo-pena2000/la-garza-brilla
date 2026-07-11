@@ -19,6 +19,9 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
+import { getCard } from "@/lib/deck";
+import { ref, push, set } from "firebase/database";
+import { database } from "@/lib/firebase";
 
 export const Route = createFileRoute("/abrir-mesa")({
   head: () => ({
@@ -110,7 +113,7 @@ function AbrirMesaPage() {
     else setStep(step - 1);
   }
 
-  function finish() {
+  async function finish() {
     if (selected.length !== perPlayer) {
       setError(`Selecciona ${perPlayer} tabla${perPlayer === 1 ? "" : "s"} para continuar.`);
       return;
@@ -122,31 +125,35 @@ function AbrirMesaPage() {
       setError("Alguna tabla ya no existe. Vuelve al paso anterior.");
       return;
     }
-    const mesa = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      mode,
-      size,
-      perPlayer,
-      locked,
-      password: locked ? password : "",
-      tablaIds: selected,
-      host: hostName || "Anfitrión",
-      players: hostName ? [{ name: hostName, role: "host" as const }] : [],
-      status: "abierta" as const,
-      createdAt: Date.now(),
-    };
+
     try {
-      const raw = localStorage.getItem(MESAS_KEY);
-      const list = raw ? (JSON.parse(raw) as unknown[]) : [];
-      list.unshift(mesa);
-      localStorage.setItem(MESAS_KEY, JSON.stringify(list));
-    } catch {
-      setError("No se pudo guardar la mesa. Intenta de nuevo.");
-      return;
+      const newMesaRef = push(ref(database, "mesas"));
+      const mesaId = newMesaRef.key;
+      
+      if (!mesaId) throw new Error("No key generated");
+
+      const mesa = {
+        id: mesaId,
+        name: name.trim(),
+        mode,
+        size,
+        perPlayer,
+        locked,
+        password: locked ? password : "",
+        tablaIds: selected,
+        host: hostName || "Anfitrión",
+        players: hostName ? [{ name: hostName, role: "host" as const }] : [],
+        status: "abierta" as const,
+        createdAt: Date.now(),
+      };
+
+      await set(newMesaRef, mesa);
+      setError("");
+      setCreatedMesa({ id: mesa.id, name: mesa.name });
+    } catch (err) {
+      console.error(err);
+      setError("No se pudo conectar con el servidor para guardar la mesa.");
     }
-    setError("");
-    setCreatedMesa({ id: mesa.id, name: mesa.name });
   }
 
   function toggleSelect(id: string) {
@@ -682,15 +689,6 @@ function StepSelectTablas({
   );
 }
 
-const MINI_PALETTE = [
-  "linear-gradient(135deg, #ff8a5c, #ff5a86)",
-  "linear-gradient(135deg, #4ac6ff, #6a5cff)",
-  "linear-gradient(135deg, #ffd45c, #ff8a3c)",
-  "linear-gradient(135deg, #5cffb0, #12b8a3)",
-  "linear-gradient(135deg, #ff6bd5, #a855f7)",
-  "linear-gradient(135deg, #64d2ff, #0a84ff)",
-];
-
 function MiniGrid({ cards, size }: { cards: number[]; size: Size }) {
   const cols = size === "4x4" ? 4 : 5;
   return (
@@ -698,13 +696,19 @@ function MiniGrid({ cards, size }: { cards: number[]; size: Size }) {
       className="grid gap-[3px] overflow-hidden rounded-xl"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
-      {cards.map((n, i) => (
-        <div
-          key={i}
-          className="aspect-[3/4] rounded-md"
-          style={{ background: MINI_PALETTE[n % MINI_PALETTE.length] }}
-        />
-      ))}
+      {cards.map((n, i) => {
+        const card = getCard(n);
+        return (
+          <div key={i} className="relative aspect-[3/4] overflow-hidden rounded-md">
+            <img
+              src={card?.image}
+              alt={card?.name ?? `Carta ${n}`}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

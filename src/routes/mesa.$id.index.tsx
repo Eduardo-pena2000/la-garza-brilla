@@ -16,6 +16,9 @@ import {
   Timer,
 } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
+import { getCard } from "@/lib/deck";
+import { ref, onValue, update } from "firebase/database";
+import { database } from "@/lib/firebase";
 
 export const Route = createFileRoute("/mesa/$id/")({
   head: () => ({
@@ -74,29 +77,6 @@ const STATUS_META: Record<Status, { label: string; color: string }> = {
   terminada: { label: "Terminada", color: "var(--brand-pink)" },
 };
 
-function loadMesa(id: string): Mesa | null {
-  try {
-    const raw = localStorage.getItem(MESAS_KEY);
-    if (!raw) return null;
-    const list = JSON.parse(raw) as Mesa[];
-    return list.find((m) => m.id === id) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function saveMesa(updated: Mesa) {
-  try {
-    const raw = localStorage.getItem(MESAS_KEY);
-    const list = raw ? (JSON.parse(raw) as Mesa[]) : [];
-    const idx = list.findIndex((m) => m.id === updated.id);
-    if (idx >= 0) list[idx] = updated;
-    localStorage.setItem(MESAS_KEY, JSON.stringify(list));
-  } catch {
-    /* ignore */
-  }
-}
-
 function loadTablas(): Tabla[] {
   try {
     const raw = localStorage.getItem(TABLAS_KEY);
@@ -117,9 +97,22 @@ function MesaPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setMesa(loadMesa(id));
     setTablas(loadTablas());
-    setLoading(false);
+    
+    const mesaRef = ref(database, `mesas/${id}`);
+    const unsubscribe = onValue(mesaRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Ensure players array exists
+        if (!data.players) data.players = [];
+        setMesa(data as Mesa);
+      } else {
+        setMesa(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [id]);
 
   const mesaTablas = useMemo(() => {
@@ -141,12 +134,15 @@ function MesaPage() {
     }
   }
 
-  function startGame() {
+  async function startGame() {
     if (!mesa) return;
-    const updated: Mesa = { ...mesa, status: "en-juego" };
-    setMesa(updated);
-    saveMesa(updated);
-    navigate({ to: "/mesa/$id/jugar", params: { id: mesa.id } });
+    try {
+      const mesaRef = ref(database, `mesas/${id}`);
+      await update(mesaRef, { status: "en-juego" });
+      navigate({ to: "/mesa/$id/jugar", params: { id: mesa.id } });
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   if (loading) {
@@ -380,14 +376,19 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
       className="grid gap-1"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
-      {cards.map((c, i) => (
-        <div
-          key={i}
-          className="aspect-square rounded-md bg-white/10 text-[9px] font-bold text-white/70 grid place-items-center ring-1 ring-white/10"
-        >
-          {c}
-        </div>
-      ))}
+      {cards.map((c, i) => {
+        const card = getCard(c);
+        return (
+          <div key={i} className="relative aspect-[3/4] overflow-hidden rounded-md ring-1 ring-white/10">
+            <img
+              src={card?.image}
+              alt={card?.name ?? `Carta ${c}`}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

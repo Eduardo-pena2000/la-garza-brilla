@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TiendaRouteImport } from './routes/tienda'
 import { Route as TablasRouteImport } from './routes/tablas'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
@@ -18,6 +19,11 @@ import { Route as MesaIdRouteImport } from './routes/mesa.$id'
 import { Route as MesaIdIndexRouteImport } from './routes/mesa.$id.index'
 import { Route as MesaIdJugarRouteImport } from './routes/mesa.$id.jugar'
 
+const TiendaRoute = TiendaRouteImport.update({
+  id: '/tienda',
+  path: '/tienda',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TablasRoute = TablasRouteImport.update({
   id: '/tablas',
   path: '/tablas',
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/configuracion': typeof ConfiguracionRoute
   '/menu': typeof MenuRoute
   '/tablas': typeof TablasRoute
+  '/tienda': typeof TiendaRoute
   '/mesa/$id': typeof MesaIdRouteWithChildren
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
   '/mesa/$id/': typeof MesaIdIndexRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/configuracion': typeof ConfiguracionRoute
   '/menu': typeof MenuRoute
   '/tablas': typeof TablasRoute
+  '/tienda': typeof TiendaRoute
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
   '/mesa/$id': typeof MesaIdIndexRoute
 }
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/configuracion': typeof ConfiguracionRoute
   '/menu': typeof MenuRoute
   '/tablas': typeof TablasRoute
+  '/tienda': typeof TiendaRoute
   '/mesa/$id': typeof MesaIdRouteWithChildren
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
   '/mesa/$id/': typeof MesaIdIndexRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/menu'
     | '/tablas'
+    | '/tienda'
     | '/mesa/$id'
     | '/mesa/$id/jugar'
     | '/mesa/$id/'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/menu'
     | '/tablas'
+    | '/tienda'
     | '/mesa/$id/jugar'
     | '/mesa/$id'
   id:
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/menu'
     | '/tablas'
+    | '/tienda'
     | '/mesa/$id'
     | '/mesa/$id/jugar'
     | '/mesa/$id/'
@@ -127,11 +139,19 @@ export interface RootRouteChildren {
   ConfiguracionRoute: typeof ConfiguracionRoute
   MenuRoute: typeof MenuRoute
   TablasRoute: typeof TablasRoute
+  TiendaRoute: typeof TiendaRoute
   MesaIdRoute: typeof MesaIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tienda': {
+      id: '/tienda'
+      path: '/tienda'
+      fullPath: '/tienda'
+      preLoaderRoute: typeof TiendaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tablas': {
       id: '/tablas'
       path: '/tablas'
@@ -210,8 +230,19 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracionRoute: ConfiguracionRoute,
   MenuRoute: MenuRoute,
   TablasRoute: TablasRoute,
+  TiendaRoute: TiendaRoute,
   MesaIdRoute: MesaIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
