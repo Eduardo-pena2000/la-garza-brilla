@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Plus, LayoutGrid, Trash2, Pencil, Sparkles } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
+import { PapelPicado } from "@/components/Fiesta";
 import { DECK, getCard } from "@/lib/deck";
 
 export const Route = createFileRoute("/tablas")({
@@ -100,19 +101,20 @@ function TablasPage() {
 
   return (
     <BrandBackground>
+      <PapelPicado count={7} />
       {/* Header */}
-      <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-5">
+      <header className="relative z-30 flex items-center justify-between gap-3 px-4 pt-16">
         <button
           type="button"
           aria-label="Volver"
           onClick={() => navigate({ to: "/menu" })}
-          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/15 backdrop-blur transition hover:bg-white/20 active:scale-95"
+          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 ring-1 ring-[color:var(--brand-gold)]/40 backdrop-blur transition hover:bg-white/20 active:scale-95"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="flex flex-col items-center leading-tight">
-          <span className="text-[11px] uppercase tracking-[0.22em] text-white/60">Colección</span>
-          <h1 className="text-lg font-extrabold">
+          <span className="text-[11px] uppercase tracking-[0.3em] text-[color:var(--brand-gold)]">Colección</span>
+          <h1 className="text-lg font-black uppercase tracking-wide drop-shadow-[0_3px_0_rgba(0,0,0,0.35)]">
             Mis tablas <span className="text-[color:var(--brand-cyan)]">({filtered.length})</span>
           </h1>
         </div>
