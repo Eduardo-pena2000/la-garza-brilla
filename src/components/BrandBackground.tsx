@@ -29,32 +29,37 @@ export function BrandBackground({ children, className = "" }: { children: ReactN
       {/* Festive floating icons */}
       <FloatingIcons />
 
-      {/* Subtle dotted texture */}
+      {/* Textura tipo talavera / azulejo mexicano */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.06]"
+        className="pointer-events-none absolute inset-0 opacity-[0.09]"
         style={{
           backgroundImage:
-            "radial-gradient(rgba(255,255,255,0.8) 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
+            "radial-gradient(rgba(255,255,255,0.9) 1.4px, transparent 1.6px), radial-gradient(rgba(255,255,255,0.55) 1.4px, transparent 1.6px), repeating-linear-gradient(45deg, rgba(255,255,255,0.12) 0 1px, transparent 1px 18px), repeating-linear-gradient(-45deg, rgba(255,255,255,0.12) 0 1px, transparent 1px 18px)",
+          backgroundSize: "36px 36px, 36px 36px, 100% 100%, 100% 100%",
+          backgroundPosition: "0 0, 18px 18px, 0 0, 0 0",
         }}
       />
+
+      {/* Franja de sarape al pie */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-2 sarape-band animate-sarape-slide opacity-80" />
       <div className="relative z-10">{children}</div>
     </div>
   );
 }
 
 function FloatingIcons() {
-  // Lotería-inspired emoji confetti floating across the background
+  // Iconografía mexicana flotando de fondo
   const items = [
-    { e: "🌵", top: "8%", left: "6%", size: 22, delay: "0s", dur: "5s" },
-    { e: "🎺", top: "14%", right: "8%", size: 24, delay: "1.2s", dur: "6s" },
-    { e: "🌶️", top: "42%", left: "4%", size: 20, delay: "0.6s", dur: "5.5s" },
-    { e: "🎲", top: "58%", right: "6%", size: 22, delay: "1.8s", dur: "6.5s" },
-    { e: "🪅", top: "72%", left: "10%", size: 24, delay: "0.9s", dur: "5.2s" },
-    { e: "⭐", top: "28%", right: "16%", size: 18, delay: "2.1s", dur: "4.8s" },
-    { e: "🌙", top: "82%", right: "14%", size: 20, delay: "0.3s", dur: "5.8s" },
-    { e: "🌞", top: "22%", left: "20%", size: 18, delay: "1.5s", dur: "6.2s" },
+    { e: "🌵", top: "10%", left: "6%", size: 24, delay: "0s", dur: "5s" },
+    { e: "🎺", top: "16%", right: "8%", size: 26, delay: "1.2s", dur: "6s" },
+    { e: "🌶️", top: "42%", left: "4%", size: 22, delay: "0.6s", dur: "5.5s" },
+    { e: "🪇", top: "58%", right: "6%", size: 24, delay: "1.8s", dur: "6.5s" },
+    { e: "🪅", top: "72%", left: "10%", size: 26, delay: "0.9s", dur: "5.2s" },
+    { e: "💀", top: "30%", right: "16%", size: 20, delay: "2.1s", dur: "4.8s" },
+    { e: "🌮", top: "84%", right: "14%", size: 22, delay: "0.3s", dur: "5.8s" },
+    { e: "🌻", top: "24%", left: "20%", size: 20, delay: "1.5s", dur: "6.2s" },
+    { e: "🎸", top: "66%", left: "22%", size: 20, delay: "2.4s", dur: "5.4s" },
   ];
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 opacity-25">
