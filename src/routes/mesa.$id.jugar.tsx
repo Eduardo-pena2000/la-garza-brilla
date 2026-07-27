@@ -608,6 +608,7 @@ function JugarPage() {
 
         {/* TOP HEADER */}
         <header className="h-14 bg-[color:var(--brand-navy-deep)] flex items-center justify-between px-3 shrink-0 z-30 relative shadow-md">
+          <span aria-hidden className="absolute inset-x-0 bottom-0 h-1.5 sarape-band animate-sarape-slide" />
           <button onClick={() => navigate({ to: "/mesa/$id", params: { id: mesa.id } })} className="p-2 -ml-2 text-white/80 active:scale-95 hover:text-white transition">
             <ArrowLeft className="w-6 h-6" strokeWidth={2.5} />
           </button>
