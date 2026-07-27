@@ -130,6 +130,46 @@ function GoogleIcon({ className = "" }: { className?: string }) {
   );
 }
 
+function PapelPicado() {
+  const colors = [
+    "var(--brand-pink)",
+    "var(--brand-gold)",
+    "var(--brand-teal)",
+    "var(--brand-cyan)",
+    "oklch(0.72 0.2 30)",
+  ];
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-between px-1">
+      {Array.from({ length: 9 }).map((_, i) => (
+        <div
+          key={i}
+          className="animate-papel-sway"
+          style={{ animationDelay: `${(i % 5) * 0.25}s`, animationDuration: `${3 + (i % 3) * 0.4}s` }}
+        >
+          <svg width="46" height="60" viewBox="0 0 46 60">
+            <path d="M0 0 H46 V40 L23 58 L0 40 Z" fill={colors[i % colors.length]} opacity="0.85" />
+            <circle cx="23" cy="16" r="6" fill="rgba(0,0,0,0.35)" />
+            <circle cx="11" cy="28" r="3.2" fill="rgba(0,0,0,0.35)" />
+            <circle cx="35" cy="28" r="3.2" fill="rgba(0,0,0,0.35)" />
+            <circle cx="23" cy="34" r="3.6" fill="rgba(0,0,0,0.35)" />
+          </svg>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GoogleIconLegacy({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.2 35.5 24 35.5c-6.4 0-11.5-5.1-11.5-11.5S17.6 12.5 24 12.5c2.9 0 5.6 1.1 7.6 2.9l5.7-5.7C33.9 6.5 29.2 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5 43.5 34.8 43.5 24c0-1.2-.1-2.4-.4-3.5z"/>
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 18.9 12.5 24 12.5c2.9 0 5.6 1.1 7.6 2.9l5.7-5.7C33.9 6.5 29.2 4.5 24 4.5 16.3 4.5 9.7 8.9 6.3 14.7z"/>
+      <path fill="#4CAF50" d="M24 43.5c5.1 0 9.8-2 13.3-5.2l-6.1-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.1-11.3-7.5l-6.5 5C9.5 39 16.2 43.5 24 43.5z"/>
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4-4.1 5.2l6.1 5.2c-.4.4 6.7-4.9 6.7-14.4 0-1.2-.1-2.4-.4-3.5z"/>
+    </svg>
+  );
+}
+
 function AppleIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
