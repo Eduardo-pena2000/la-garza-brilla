@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Save, ChevronDown, LayoutGrid } from "lucide-react";
+import { SarapeBand } from "@/components/Fiesta";
 
 export const Route = createFileRoute("/configuracion")({
   head: () => ({
@@ -82,22 +83,27 @@ function ConfiguracionPage() {
 
   return (
     <div className="min-h-screen bg-white text-neutral-900">
-      {/* Orange header */}
+      {/* Cabecera festiva */}
       <header
-        className="relative flex h-16 items-center px-4"
-        style={{ background: "#F1592A" }}
+        className="relative flex h-20 items-center overflow-hidden rounded-b-[26px] px-4 shadow-[var(--shadow-brand)]"
+        style={{ background: "var(--gradient-brand)" }}
       >
+        <SarapeBand className="absolute inset-x-0 top-0" />
+        <SarapeBand className="absolute inset-x-0 bottom-0" height={4} />
         <button
           type="button"
           aria-label="Volver"
           onClick={() => navigate({ to: "/menu" })}
-          className="grid h-10 w-10 place-items-center rounded-full text-white transition active:scale-95"
+          className="relative z-10 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white ring-1 ring-[color:var(--brand-gold)]/40 transition active:scale-95"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="pointer-events-none absolute inset-x-0 text-center text-xl font-semibold text-white">
-          Configuración
-        </h1>
+        <div className="pointer-events-none absolute inset-x-0 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.4em] text-[color:var(--brand-gold)]">La Garza</p>
+          <h1 className="text-xl font-black uppercase tracking-wide text-white drop-shadow-[0_3px_0_rgba(0,0,0,0.35)]">
+            Configuración
+          </h1>
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-md divide-y divide-neutral-200 px-5">
