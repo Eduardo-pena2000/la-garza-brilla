@@ -19,6 +19,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
+import { PapelPicado } from "@/components/Fiesta";
 import { getCard } from "@/lib/deck";
 import { ref, push, set } from "firebase/database";
 import { database } from "@/lib/firebase";
@@ -166,20 +167,21 @@ function AbrirMesaPage() {
 
   return (
     <BrandBackground>
-      <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-5">
+      <PapelPicado count={7} />
+      <header className="relative z-30 flex items-center justify-between gap-3 px-4 pt-16">
         <button
           type="button"
           aria-label="Volver"
           onClick={back}
-          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/15 backdrop-blur transition hover:bg-white/20 active:scale-95"
+          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 ring-1 ring-[color:var(--brand-gold)]/40 backdrop-blur transition hover:bg-white/20 active:scale-95"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="flex flex-col items-center leading-tight">
-          <span className="text-[11px] uppercase tracking-[0.22em] text-white/60">
+          <span className="text-[11px] uppercase tracking-[0.3em] text-[color:var(--brand-gold)]">
             Paso {step + 1} de {STEPS.length}
           </span>
-          <h1 className="text-lg font-extrabold">
+          <h1 className="text-lg font-black uppercase tracking-wide drop-shadow-[0_3px_0_rgba(0,0,0,0.35)]">
             {STEPS[step]} <span className="text-[color:var(--brand-cyan)]">·</span>{" "}
             <span className="text-white/80">Abrir mesa</span>
           </h1>

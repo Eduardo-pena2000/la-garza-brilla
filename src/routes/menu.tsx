@@ -19,8 +19,8 @@ import {
   Image as ImageIcon,
   Zap,
 } from "lucide-react";
-import { BrandLogo } from "@/components/BrandLogo";
 import { BrandBackground } from "@/components/BrandBackground";
+import { PapelPicado, SarapeBand, Wordmark } from "@/components/Fiesta";
 import { NameModal } from "@/components/NameModal";
 import { CoinAnimation } from "@/components/CoinAnimation";
 
@@ -67,21 +67,22 @@ function MenuPage() {
   }, []);
 
   const actions: ActionCard[] = [
-    { label: "Crear mesa", emoji: "🎲", gradient: "var(--gradient-card-pink)", onClick: () => navigate({ to: "/abrir-mesa" }) },
-    { label: "Unirse a mesa pública", emoji: "🌍", gradient: "var(--gradient-card-teal)" },
-    { label: "Mis barajas", emoji: "🃏", gradient: "var(--gradient-card-cyan)", onClick: () => navigate({ to: "/tablas" }) },
-    { label: "Tienda", emoji: "🏪", gradient: "var(--gradient-card-teal)", onClick: () => navigate({ to: "/tienda" }) },
+    { label: "Crear mesa", emoji: "🪅", gradient: "var(--gradient-card-pink)", onClick: () => navigate({ to: "/abrir-mesa" }) },
+    { label: "Unirse a mesa pública", emoji: "🎺", gradient: "var(--gradient-card-teal)" },
+    { label: "Mis barajas", emoji: "🌵", gradient: "var(--gradient-card-cyan)", onClick: () => navigate({ to: "/tablas" }) },
+    { label: "Tienda", emoji: "🌶️", gradient: "var(--gradient-card-teal)", onClick: () => navigate({ to: "/tienda" }) },
     { label: "Conviértete en VIP", emoji: "👑", gradient: "var(--gradient-card-gold)", onClick: () => setActiveModal("vip") },
   ];
 
   return (
     <BrandBackground>
-      <header className="relative z-10 flex items-center justify-between px-5 pt-5 animate-slide-up-soft">
+      <PapelPicado />
+      <header className="relative z-30 flex items-center justify-between px-5 pt-16 animate-slide-up-soft">
         <button
           type="button"
           aria-label="Abrir menú"
           onClick={() => setSidebarOpen(true)}
-          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-white/15 transition hover:bg-white/20 hover:scale-105 active:scale-95"
+          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-[color:var(--brand-gold)]/40 transition hover:bg-white/20 hover:scale-105 active:scale-95"
         >
           <MenuIcon className="h-5 w-5" />
         </button>
@@ -93,7 +94,7 @@ function MenuPage() {
           <button
             type="button"
             aria-label="Idioma"
-            className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-white/15 transition hover:bg-white/20 hover:scale-105 active:scale-95"
+            className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 backdrop-blur ring-1 ring-[color:var(--brand-gold)]/40 transition hover:bg-white/20 hover:scale-105 active:scale-95"
           >
             <Languages className="h-5 w-5" />
           </button>
@@ -101,29 +102,33 @@ function MenuPage() {
 
       </header>
 
-      {/* Centered logo block */}
-      <section className="relative z-10 mt-6 flex flex-col items-center px-6">
-        <BrandLogo size={170} />
-        <h1 className="mt-4 text-2xl font-extrabold tracking-wide animate-slide-up-soft" style={{ animationDelay: "0.15s" }}>
-          Lotería <span className="text-[color:var(--brand-cyan)]">La Garza</span>
-        </h1>
+      {/* Wordmark central en marco de talavera */}
+      <section className="relative z-10 mt-5 flex flex-col items-center px-5">
+        <div className="relative w-full max-w-md animate-pop-in">
+          <div className="pointer-events-none absolute -inset-3 rounded-[2rem] opacity-60 blur-2xl" style={{ background: "radial-gradient(60% 60% at 50% 40%, var(--brand-pink), transparent 70%)" }} />
+          <div className="relative overflow-hidden rounded-[1.75rem] border border-white/20 bg-white/5 px-5 py-6 backdrop-blur-sm shadow-[var(--shadow-brand)]">
+            <SarapeBand className="absolute inset-x-0 top-0" />
+            <SarapeBand className="absolute inset-x-0 bottom-0" />
+            <Wordmark size="md" />
+          </div>
+        </div>
         <button
           type="button"
           onClick={() => setEditName(true)}
-          className="mt-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 ring-1 ring-white/15 transition hover:bg-white/20 animate-slide-up-soft"
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 ring-1 ring-[color:var(--brand-gold)]/40 transition hover:bg-white/20 animate-slide-up-soft"
           style={{ animationDelay: "0.25s" }}
         >
           👋 Hola, <span className="font-semibold text-white">{name}</span>
         </button>
       </section>
 
-      <main className="relative z-10 mx-auto mt-8 w-full max-w-md space-y-7 px-5 pb-10">
+      <main className="relative z-10 mx-auto mt-7 w-full max-w-md space-y-7 px-5 pb-14">
         <CardStack title="Jugar" cards={actions} startDelay={0.3} />
 
         <button
           type="button"
           onClick={() => navigate({ to: "/configuracion" })}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-white/10 active:scale-[0.98] animate-slide-up-soft"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--brand-gold)]/30 bg-white/5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-white/10 active:scale-[0.98] animate-slide-up-soft"
           style={{ animationDelay: "0.8s" }}
         >
           <Settings className="h-4 w-4" /> Configuración
@@ -132,7 +137,7 @@ function MenuPage() {
         <button
           type="button"
           onClick={() => navigate({ to: "/" })}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-white/10 active:scale-[0.98] animate-slide-up-soft"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--brand-gold)]/30 bg-white/5 text-sm font-semibold text-white/90 backdrop-blur transition hover:bg-white/10 active:scale-[0.98] animate-slide-up-soft"
           style={{ animationDelay: "0.9s" }}
         >
           <LogOut className="h-4 w-4" /> Cerrar sesión
@@ -247,6 +252,8 @@ function CardStack({ title, cards, startDelay = 0 }: { title: string; cards: Act
                 animationDelay: `${startDelay + 0.08 * (idx + 1)}s`,
               }}
             >
+              {/* franja de sarape lateral */}
+              <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-2 sarape-band animate-sarape-slide" />
               {/* glossy top highlight */}
               <span
                 aria-hidden
