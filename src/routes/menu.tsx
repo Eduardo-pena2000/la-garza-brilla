@@ -67,10 +67,10 @@ function MenuPage() {
   }, []);
 
   const actions: ActionCard[] = [
-    { label: "Crear mesa", emoji: "🎲", gradient: "var(--gradient-card-pink)", onClick: () => navigate({ to: "/abrir-mesa" }) },
-    { label: "Unirse a mesa pública", emoji: "🌍", gradient: "var(--gradient-card-teal)" },
-    { label: "Mis barajas", emoji: "🃏", gradient: "var(--gradient-card-cyan)", onClick: () => navigate({ to: "/tablas" }) },
-    { label: "Tienda", emoji: "🏪", gradient: "var(--gradient-card-teal)", onClick: () => navigate({ to: "/tienda" }) },
+    { label: "Crear mesa", emoji: "🪅", gradient: "var(--gradient-card-pink)", onClick: () => navigate({ to: "/abrir-mesa" }) },
+    { label: "Unirse a mesa pública", emoji: "🎺", gradient: "var(--gradient-card-teal)" },
+    { label: "Mis barajas", emoji: "🌵", gradient: "var(--gradient-card-cyan)", onClick: () => navigate({ to: "/tablas" }) },
+    { label: "Tienda", emoji: "🌶️", gradient: "var(--gradient-card-teal)", onClick: () => navigate({ to: "/tienda" }) },
     { label: "Conviértete en VIP", emoji: "👑", gradient: "var(--gradient-card-gold)", onClick: () => setActiveModal("vip") },
   ];
 
@@ -252,6 +252,8 @@ function CardStack({ title, cards, startDelay = 0 }: { title: string; cards: Act
                 animationDelay: `${startDelay + 0.08 * (idx + 1)}s`,
               }}
             >
+              {/* franja de sarape lateral */}
+              <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-2 sarape-band animate-sarape-slide" />
               {/* glossy top highlight */}
               <span
                 aria-hidden
