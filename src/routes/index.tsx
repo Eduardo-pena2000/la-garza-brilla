@@ -1,8 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { User } from "lucide-react";
+import { PartyPopper } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
-import { BrandLogo } from "@/components/BrandLogo";
 import { NameModal } from "@/components/NameModal";
 
 export const Route = createFileRoute("/")({
@@ -23,17 +22,41 @@ function LoginPage() {
 
   return (
     <BrandBackground>
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-10 pt-16">
-        <BrandLogo size={220} />
+      <PapelPicado />
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-10 pt-24">
+        {/* Marco tipo talavera con el wordmark */}
+        <div className="relative w-full animate-pop-in">
+          <div className="pointer-events-none absolute -inset-3 rounded-[2rem] opacity-70 blur-2xl" style={{ background: "radial-gradient(60% 60% at 50% 40%, var(--brand-pink), transparent 70%)" }} />
+          <div className="relative overflow-hidden rounded-[1.75rem] border border-white/20 bg-white/5 px-5 py-8 text-center backdrop-blur-sm shadow-[var(--shadow-brand)]">
+            <div aria-hidden className="absolute inset-x-0 top-0 h-1.5 sarape-band animate-sarape-slide" />
+            <div aria-hidden className="absolute inset-x-0 bottom-0 h-1.5 sarape-band animate-sarape-slide" />
 
-        <h1 className="mt-6 text-center text-3xl font-extrabold tracking-wide animate-slide-up-soft" style={{ animationDelay: "0.2s" }}>
-          Lotería <span className="text-[color:var(--brand-cyan)]">La Garza</span>
-        </h1>
-        <p className="mt-1 text-center text-sm text-white/70 animate-slide-up-soft" style={{ animationDelay: "0.3s" }}>
-          Reúne a tu gente y juega online
-        </p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.5em] text-[color:var(--brand-gold)] animate-slide-up-soft" style={{ animationDelay: "0.15s" }}>
+              Lotería
+            </p>
 
-        <div className="mt-10 flex w-full flex-col gap-3">
+            <h1 className="relative mt-1 animate-wiggle-soft">
+              <span className="block text-[3.15rem] leading-[0.9] font-black uppercase tracking-tight text-white drop-shadow-[0_6px_0_rgba(0,0,0,0.35)]">
+                La
+              </span>
+              <span className="relative block text-[3.4rem] leading-[0.95] font-black uppercase tracking-tight text-[color:var(--brand-cyan)] drop-shadow-[0_6px_0_rgba(0,0,0,0.35)]">
+                Garza
+                <span aria-hidden className="pointer-events-none absolute inset-0 text-shine text-transparent">Garza</span>
+              </span>
+            </h1>
+
+            <div className="mx-auto mt-4 flex items-center justify-center gap-2">
+              <span className="h-px w-10 bg-white/30" />
+              <span className="text-lg">✦</span>
+              <span className="h-px w-10 bg-white/30" />
+            </div>
+            <p className="mt-2 text-sm text-white/75 animate-slide-up-soft" style={{ animationDelay: "0.3s" }}>
+              Reúne a tu gente y juega online
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-9 flex w-full flex-col gap-3">
           <button
             type="button"
             className="group relative flex h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-white text-[15px] font-semibold text-[color:var(--brand-navy-dark)] shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.5)] active:scale-[0.98] animate-slide-up-soft"
@@ -41,7 +64,9 @@ function LoginPage() {
             onClick={() => setAskName(true)}
           >
             <span aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-12 bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" style={{ animation: "shimmer-x 2.4s ease-in-out infinite" }} />
-            <GoogleIcon className="h-5 w-5" />
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-[color:var(--brand-navy-dark)]/5">
+              <GoogleIcon className="h-5 w-5" />
+            </span>
             Iniciar sesión con Google
           </button>
           <button
@@ -50,16 +75,21 @@ function LoginPage() {
             style={{ animationDelay: "0.55s" }}
             onClick={() => setAskName(true)}
           >
-            <AppleIcon className="h-5 w-5" />
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/10">
+              <AppleIcon className="h-5 w-5" />
+            </span>
             Iniciar sesión con Apple
           </button>
           <button
             type="button"
-            className="relative flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-white/15 bg-white/10 text-[15px] font-semibold text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/15 active:scale-[0.98] animate-slide-up-soft"
+            className="relative flex h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-[15px] font-semibold text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/15 active:scale-[0.98] animate-slide-up-soft"
             style={{ animationDelay: "0.65s" }}
             onClick={() => setAskName(true)}
           >
-            <User className="h-5 w-5" />
+            <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 sarape-band animate-sarape-slide" />
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-[color:var(--brand-gold)]/25">
+              <PartyPopper className="h-5 w-5 text-[color:var(--brand-gold)]" />
+            </span>
             Entrar como invitado
           </button>
         </div>
@@ -97,6 +127,35 @@ function GoogleIcon({ className = "" }: { className?: string }) {
       <path fill="#4CAF50" d="M24 43.5c5.1 0 9.8-2 13.3-5.2l-6.1-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.1-11.3-7.5l-6.5 5C9.5 39 16.2 43.5 24 43.5z"/>
       <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4-4.1 5.2l6.1 5.2c-.4.4 6.7-4.9 6.7-14.4 0-1.2-.1-2.4-.4-3.5z"/>
     </svg>
+  );
+}
+
+function PapelPicado() {
+  const colors = [
+    "var(--brand-pink)",
+    "var(--brand-gold)",
+    "var(--brand-teal)",
+    "var(--brand-cyan)",
+    "oklch(0.72 0.2 30)",
+  ];
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-between px-1">
+      {Array.from({ length: 9 }).map((_, i) => (
+        <div
+          key={i}
+          className="animate-papel-sway"
+          style={{ animationDelay: `${(i % 5) * 0.25}s`, animationDuration: `${3 + (i % 3) * 0.4}s` }}
+        >
+          <svg width="46" height="60" viewBox="0 0 46 60">
+            <path d="M0 0 H46 V40 L23 58 L0 40 Z" fill={colors[i % colors.length]} opacity="0.85" />
+            <circle cx="23" cy="16" r="6" fill="rgba(0,0,0,0.35)" />
+            <circle cx="11" cy="28" r="3.2" fill="rgba(0,0,0,0.35)" />
+            <circle cx="35" cy="28" r="3.2" fill="rgba(0,0,0,0.35)" />
+            <circle cx="23" cy="34" r="3.6" fill="rgba(0,0,0,0.35)" />
+          </svg>
+        </div>
+      ))}
+    </div>
   );
 }
 

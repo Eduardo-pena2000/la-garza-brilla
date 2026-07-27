@@ -240,3 +240,46 @@
 .animate-scratch-hand {
   animation: scratch-hand 0.15s ease-in-out infinite;
 }
+
+/* ============ Estilo mexicano ============ */
+@keyframes papel-sway {
+  0%, 100% { transform: rotate(-2.5deg) translateY(0); }
+  50% { transform: rotate(2.5deg) translateY(2px); }
+}
+@keyframes text-shine {
+  0% { background-position: -180% 0; }
+  100% { background-position: 280% 0; }
+}
+@keyframes wiggle-soft {
+  0%, 100% { transform: rotate(-1.2deg); }
+  50% { transform: rotate(1.2deg); }
+}
+@keyframes sarape-slide {
+  0% { background-position: 0 0; }
+  100% { background-position: 48px 0; }
+}
+
+@utility animate-papel-sway { animation: papel-sway 3.4s ease-in-out infinite; transform-origin: top center; }
+@utility animate-wiggle-soft { animation: wiggle-soft 4s ease-in-out infinite; }
+@utility animate-sarape-slide { animation: sarape-slide 3s linear infinite; }
+@utility text-shine {
+  background-image: linear-gradient(100deg, transparent 35%, rgba(255,255,255,0.85) 50%, transparent 65%);
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: text-shine 3.2s ease-in-out infinite;
+}
+/* Franja tipo sarape */
+@utility sarape-band {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--brand-pink) 0 8px,
+    var(--brand-gold) 8px 16px,
+    var(--brand-teal) 16px 24px,
+    var(--brand-cyan) 24px 32px,
+    oklch(0.72 0.2 30) 32px 40px,
+    var(--brand-navy) 40px 48px
+  );
+  background-size: 48px 100%;
+}
