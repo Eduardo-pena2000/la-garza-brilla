@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Pause, Play, Settings2, MessageCircle, Users, RotateCcw,
   Timer as TimerIcon, Heart, Image as ImageIcon, Triangle, X, Send,
-  Menu, Info, Trophy, Link as LinkIcon, Edit2
+  Menu, Info, Trophy, Link as LinkIcon, Edit2, Share2
 } from "lucide-react";
 import { DECK, getCard } from "@/lib/deck";
 import { ref, onValue, update, push, set, onDisconnect } from "firebase/database";
@@ -86,7 +86,7 @@ function JugarPage() {
   const navigate = useNavigate();
 
   const [mesa, setMesa] = useState<Mesa | null>(null);
-  const [tabla, setTabla] = useState<Tabla | null>(null);
+  const [tablasActivas, setTablasActivas] = useState<Tabla[]>([]);
   const [loading, setLoading] = useState(true);
   const [marked, setMarked] = useState<Set<number>>(new Set());
   const [paused, setPaused] = useState(true);
@@ -140,6 +140,14 @@ function JugarPage() {
           const newDeck = shuffle(DECK.map((c) => c.n));
           update(mesaRef, { deck: newDeck, drawnIdx: -1 });
         }
+        
+        // Initialize boards if not loaded yet
+        setTablasActivas(prev => {
+          if (prev.length > 0) return prev;
+          const loaded = loadTablas();
+          return loaded.slice(0, data.perPlayer || 1);
+        });
+
       } else {
         setMesa(null);
       }
@@ -165,9 +173,6 @@ function JugarPage() {
     const playerRef = ref(database, `mesas/${id}/players/${userName}`);
     set(playerRef, true);
     onDisconnect(playerRef).remove();
-
-    const tablas = loadTablas();
-    if (tablas.length > 0) setTabla(tablas[0]);
 
     return () => {
       unsubscribe(); unsubscribeChat(); set(playerRef, null);
@@ -215,14 +220,15 @@ function JugarPage() {
   }, [paused, drawnIdx, mesa, drawNext, won, isHost]);
 
   useEffect(() => {
-    if (!mesa || !tabla) return;
-    if (checkWin(mesa.mode, tabla.size, tabla.cards, marked)) {
+    if (!mesa || tablasActivas.length === 0) return;
+    const hasWin = tablasActivas.some(t => checkWin(mesa.mode, t.size, t.cards, marked));
+    if (hasWin) {
       setWon(true);
       setPaused(true);
       if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
       if (settings.vibration && navigator.vibrate) navigator.vibrate([500, 200, 500]);
     }
-  }, [marked, mesa, tabla, settings]);
+  }, [marked, mesa, tablasActivas, settings]);
 
   function toggleMark(card: number) {
     if (won) return;
@@ -318,7 +324,7 @@ function JugarPage() {
   }
 
   if (loading) return <BrandBackground><div className="grid min-h-[100dvh] place-items-center text-white">Cargando...</div></BrandBackground>;
-  if (!mesa || !tabla) return <BrandBackground><div className="grid min-h-[100dvh] place-items-center text-white">Mesa no disponible</div></BrandBackground>;
+  if (!mesa || tablasActivas.length === 0) return <BrandBackground><div className="grid min-h-[100dvh] place-items-center text-white">Tablas no disponibles</div></BrandBackground>;
 
   const timeSecs = speedFor(mesa.mode) / 1000;
   const connectedPlayers = mesa.players ? Object.keys(mesa.players) : [mesa.host];
@@ -529,16 +535,31 @@ function JugarPage() {
                       {activeModal === "tablas" && (
                         <div className="flex flex-col gap-3">
                           {isGameStarted && <p className="text-[color:var(--brand-gold)] text-sm text-center mb-2 font-bold">La partida ya inició. Aplica para la siguiente.</p>}
-                          {loadTablas().map((t, idx) => (
-                            <button key={t.id} onClick={() => { setTabla(t); setActiveModal(null); setMarked(new Set()); }}
-                              className={`p-4 rounded-xl border text-left flex justify-between items-center transition-colors shadow-sm ${
-                                tabla.id === t.id ? 'bg-white/20 border-white' : 'bg-white/5 border-white/10 hover:bg-white/10'
-                              }`}
-                            >
-                              <span className="text-white font-bold text-lg">Tabla {idx + 1} <span className="text-white/50 text-sm ml-2">({t.size})</span></span>
-                              {tabla.id === t.id && <span className="text-[color:var(--brand-gold)] text-xs font-black uppercase tracking-wider">Activa</span>}
-                            </button>
-                          ))}
+                          {loadTablas().map((t, idx) => {
+                            const isActiva = tablasActivas.some(act => act.id === t.id);
+                            return (
+                              <button key={t.id} onClick={() => { 
+                                  // toggle this table
+                                  let newActive = [...tablasActivas];
+                                  if (isActiva) {
+                                    newActive = newActive.filter(act => act.id !== t.id);
+                                  } else {
+                                    if (newActive.length < mesa.perPlayer) newActive.push(t);
+                                  }
+                                  if (newActive.length > 0) {
+                                    setTablasActivas(newActive);
+                                    setMarked(new Set());
+                                  }
+                                }}
+                                className={`p-4 rounded-xl border text-left flex justify-between items-center transition-colors shadow-sm ${
+                                  isActiva ? 'bg-white/20 border-white' : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                }`}
+                              >
+                                <span className="text-white font-bold text-lg">Tabla {idx + 1} <span className="text-white/50 text-sm ml-2">({t.size})</span></span>
+                                {isActiva && <span className="text-[color:var(--brand-gold)] text-xs font-black uppercase tracking-wider">Activa</span>}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
 
@@ -646,61 +667,89 @@ function JugarPage() {
           </button>
         </div>
 
+        {/* INLINE LIVE CHAT */}
+        <div className="h-[72px] bg-black/20 shrink-0 border-b border-white/5 p-2 overflow-y-auto flex flex-col-reverse shadow-inner relative z-20">
+          <div className="flex flex-col gap-1 w-full max-w-[800px] mx-auto">
+            {chatMsgs.slice(-5).map((msg, idx) => (
+              <div key={idx} className="text-[11px] leading-tight animate-fade-in-right">
+                <span className="font-bold text-[color:var(--brand-cyan)]">{msg.sender}: </span>
+                <span className="text-white/90">{msg.text}</span>
+              </div>
+            ))}
+            {chatMsgs.length === 0 && (
+              <div className="text-[11px] text-white/30 italic text-center w-full mt-4">No hay mensajes aún</div>
+            )}
+          </div>
+        </div>
+
         {/* ABSOLUTE DECK CARD */}
-        <div className="absolute right-2 top-28 z-20 w-[90px] h-[135px] bg-white/10 p-1 rounded-lg shadow-2xl border border-white/20 transform rotate-2 backdrop-blur-md">
+        <div className="absolute right-2 top-[180px] z-20 w-[64px] h-[96px] bg-white/10 p-1 rounded-lg shadow-2xl border border-white/20 transform rotate-2 backdrop-blur-md">
           {drawn ? (
             <img src={drawn.image} alt={drawn.name} className="w-full h-full object-fill animate-pop-in rounded-md" />
           ) : (
             <div className="w-full h-full bg-red-600 rounded-md border border-red-800 flex flex-col items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
           )}
         </div>
-
         {/* MAIN GAME BOARD */}
-        <main className="flex-1 relative p-4 pt-8 flex justify-center overflow-y-auto z-10">
-          <div className="bg-white/10 p-2 rounded-2xl shadow-2xl backdrop-blur-md max-w-full w-[360px] h-fit border border-white/20">
-            <div className="grid gap-[2px] bg-white/20 border-2 border-white/10 rounded-xl overflow-hidden" style={{ gridTemplateColumns: `repeat(${tabla.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}>
-              {tabla.cards.map((c) => {
-                const card = getCard(c);
-                const isMarked = marked.has(c);
-                return (
-                  <button 
-                    key={c} 
-                    type="button" 
-                    onPointerDown={(e) => handlePointerDown(e, c)}
-                    onPointerMove={(e) => handlePointerMove(e, c)}
-                    onPointerUp={(e) => handlePointerUp(e, c)}
-                    onPointerCancel={(e) => handlePointerUp(e, c)}
-                    className="relative aspect-[1/1.55] bg-white w-full overflow-hidden active:scale-95 transition-transform touch-none select-none"
-                  >
-                    <img src={card?.image} alt={card?.name ?? `Carta ${c}`} className="w-full h-full object-fill pointer-events-none" draggable={false} />
-                    {isMarked && (
-                      <span className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 backdrop-blur-[1px] pointer-events-none">
-                        <img src={settings.marker} alt="Frijol" className="w-10 h-10 object-contain drop-shadow-lg animate-pop-in" draggable={false} />
-                      </span>
-                    )}
+        <main className="flex-1 relative p-4 pt-8 pb-32 flex justify-center items-center overflow-y-auto z-10 w-full">
+           <div className="w-full h-full flex flex-col items-center">
+             <div className={`grid gap-2 w-full max-w-[800px] h-fit place-items-center mx-auto ${
+               tablasActivas.length === 1 ? 'grid-cols-1 max-w-[360px]' :
+               'grid-cols-2'
+             }`}>
+               {tablasActivas.map(tablaItem => (
+                 <div key={tablaItem.id} className="bg-white/10 p-1.5 sm:p-2 rounded-2xl shadow-2xl backdrop-blur-md w-full max-w-[360px] h-fit border border-white/20 relative">
+                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[color:var(--brand-navy-deep)] px-3 py-0.5 rounded-full border border-[color:var(--brand-cyan)]/30 text-[10px] text-[color:var(--brand-cyan)] font-bold tracking-widest shadow-md">
+                     TABLA {tablaItem.id.slice(0, 4).toUpperCase()}
+                   </div>
+                   <div className="grid gap-[2px] bg-white/20 border-2 border-white/10 rounded-xl overflow-hidden mt-1" style={{ gridTemplateColumns: `repeat(${tablaItem.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}>
+                     {tablaItem.cards.map((c, idx) => {
+                       const card = getCard(c);
+                       const isMarked = marked.has(c);
+                       // to uniquely identify the interaction, use tablaItem.id + c
+                       const uid = `${tablaItem.id}-${c}-${idx}`;
+                       return (
+                         <button 
+                           key={uid} 
+                           type="button" 
+                           onPointerDown={(e) => handlePointerDown(e, c)}
+                           onPointerMove={(e) => handlePointerMove(e, c)}
+                           onPointerUp={(e) => handlePointerUp(e, c)}
+                           onPointerCancel={(e) => handlePointerUp(e, c)}
+                           className="relative aspect-[1/1.55] bg-white w-full overflow-hidden active:scale-95 transition-transform touch-none select-none"
+                         >
+                           <img src={card?.image} alt={card?.name ?? `Carta ${c}`} className="w-full h-full object-fill pointer-events-none" draggable={false} />
+                           {isMarked && (
+                             <span className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 backdrop-blur-[1px] pointer-events-none">
+                               <img src={settings.marker} alt="Frijol" className="w-10 h-10 object-contain drop-shadow-lg animate-pop-in" draggable={false} />
+                             </span>
+                           )}
 
-                    {/* Scratching Ritual Visual */}
-                    {interaction?.cardId === c && interaction.isScratching && (
-                      <div 
-                        className="absolute z-20 pointer-events-none drop-shadow-2xl flex flex-col items-center justify-center animate-scratch-hand"
-                        style={{ left: interaction.curX, top: interaction.curY }}
-                      >
-                         <div className="relative flex items-center justify-center">
-                            <CoinAnimation className="w-12 h-12 drop-shadow-lg z-10" />
-                            <span className="text-[40px] absolute top-3 left-4 z-20 drop-shadow-[0_4px_4px_rgba(0,0,0,0.3)]">🤏🏽</span>
-                         </div>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                           {/* Scratching Ritual Visual */}
+                           {interaction?.cardId === c && interaction.isScratching && (
+                             <div 
+                               className="absolute z-20 pointer-events-none drop-shadow-2xl flex flex-col items-center justify-center animate-scratch-hand"
+                               style={{ left: interaction.curX, top: interaction.curY }}
+                             >
+                                <div className="relative flex items-center justify-center">
+                                   <CoinAnimation className="w-12 h-12 drop-shadow-lg z-10" />
+                                   <span className="text-[40px] absolute top-3 left-4 z-20 drop-shadow-[0_4px_4px_rgba(0,0,0,0.3)]">🤏🏽</span>
+                                </div>
+                             </div>
+                           )}
+                         </button>
+                       );
+                     })}
+                   </div>
+                 </div>
+               ))}
+             </div>
+           </div>
         </main>
 
         {/* CAMBIAR TABLAS / MODO BUTTONS */}
         <div className="bg-[color:var(--brand-navy-deep)] py-3 px-4 flex justify-between gap-4 border-t border-white/10 shrink-0 z-30 relative shadow-2xl">
-          <button onClick={() => setActiveModal("tablas")} className="flex-1 py-2.5 rounded-full border-2 border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)] font-bold text-sm flex items-center justify-center gap-2 active:bg-[color:var(--brand-cyan)]/10 transition-colors">
+          <button onClick={() => setActiveModal("tablas")} className="flex-1 py-2.5 rounded-full border-2 border-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 active:bg-white/10 transition-colors">
             <RotateCcw className="w-4 h-4" strokeWidth={2.5} /> Cambiar Tablas
           </button>
           <button onClick={() => setActiveModal("modos")} className="flex-1 py-2.5 rounded-full border-2 border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)] font-bold text-sm flex items-center justify-center gap-2 active:bg-[color:var(--brand-cyan)]/10 transition-colors">

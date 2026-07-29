@@ -58,6 +58,16 @@ function loadTablas(): Tabla[] {
   }
 }
 
+function randomCards(size: Size): number[] {
+  const total = size === "4x4" ? 16 : 25;
+  const pool = Array.from({ length: 54 }, (_, i) => i + 1);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, total);
+}
+
 const STEPS = ["Nombre", "Modo", "Tablas", "Acceso", "Elegir"] as const;
 
 const MODES: { id: Mode; label: string; hint: string; icon: React.ComponentType<{ className?: string }>; gradient: string }[] = [
@@ -101,6 +111,22 @@ function AbrirMesaPage() {
     if (step === 4) return selected.length === perPlayer;
     return true;
   }, [step, name, locked, password, selected, perPlayer]);
+
+  function addTabla() {
+    const next: Tabla = {
+      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36),
+      size,
+      cards: randomCards(size),
+      createdAt: Date.now(),
+    };
+    const updated = [next, ...tablas];
+    setTablas(updated);
+    try {
+      localStorage.setItem(TABLAS_KEY, JSON.stringify(updated));
+    } catch {
+      /* ignore */
+    }
+  }
 
   function next() {
     if (!canNext) return;
@@ -237,7 +263,7 @@ function AbrirMesaPage() {
             selected={selected}
             onToggle={toggleSelect}
             size={size}
-            onGoTablas={() => navigate({ to: "/tablas" })}
+            onGoTablas={addTabla}
           />
         )}
 
@@ -436,25 +462,15 @@ function StepTablas({
       <div className="mt-4 relative flex h-12 items-center rounded-full bg-white/10 p-1 ring-1 ring-white/15 backdrop-blur">
         <span
           aria-hidden
-          className="absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full transition-all duration-300"
+          className="absolute top-1 bottom-1 left-1 right-1 rounded-full transition-all duration-300"
           style={{
-            left: size === "4x4" ? 4 : "calc(50% + 0px)",
             background: "var(--gradient-brand)",
             boxShadow: "0 8px 20px -8px rgba(0,0,0,0.5)",
           }}
         />
-        {(["4x4", "5x5"] as Size[]).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onSize(s)}
-            className={`relative z-10 flex-1 rounded-full text-sm font-bold transition ${
-              size === s ? "text-white" : "text-white/60"
-            }`}
-          >
-            {s}
-          </button>
-        ))}
+        <div className="relative z-10 flex-1 text-center text-sm font-bold text-white">
+          4x4 (16 cartas)
+        </div>
       </div>
 
       <div className="mt-6 rounded-3xl bg-white/5 p-5 ring-1 ring-white/10">
@@ -649,7 +665,7 @@ function StepSelectTablas({
             className="mt-4 flex h-11 items-center gap-2 rounded-full px-5 text-sm font-bold text-white shadow-[var(--shadow-card)]"
             style={{ background: "var(--gradient-card-pink)" }}
           >
-            <PlusCircle className="h-4 w-4" /> Ir a Mis tablas
+            <PlusCircle className="h-4 w-4" /> Crear tabla
           </button>
         </div>
       ) : (

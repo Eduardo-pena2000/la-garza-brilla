@@ -26,8 +26,8 @@ export function BrandBackground({ children, className = "" }: { children: ReactN
         style={{ background: "var(--brand-gold)", animationDelay: "1.5s" }}
       />
 
-      {/* Festive floating icons */}
-      <FloatingIcons />
+      {/* Floating lotería cards (real images) */}
+      <FloatingCards />
 
       {/* Subtle dotted texture */}
       <div
@@ -75,6 +75,69 @@ function FloatingIcons() {
           {it.e}
         </span>
       ))}
+    </div>
+  );
+}
+
+/* ── Floating Lotería card images ── */
+interface FloatingCardDef {
+  cardNum: number;
+  top: string;
+  left?: string;
+  right?: string;
+  size: number;
+  rotate: number;
+  delay: string;
+  dur: string;
+  opacity: number;
+}
+
+function FloatingCards() {
+  const cards: FloatingCardDef[] = [
+    { cardNum: 1,  top: "5%",   left: "3%",   size: 54, rotate: -15, delay: "0s",    dur: "7s",   opacity: 0.12 },
+    { cardNum: 9,  top: "12%",  right: "5%",  size: 48, rotate: 12,  delay: "1.2s",  dur: "8s",   opacity: 0.10 },
+    { cardNum: 17, top: "35%",  left: "2%",   size: 44, rotate: -8,  delay: "0.6s",  dur: "6.5s", opacity: 0.09 },
+    { cardNum: 25, top: "55%",  right: "4%",  size: 50, rotate: 20,  delay: "2s",    dur: "7.5s", opacity: 0.11 },
+    { cardNum: 33, top: "75%",  left: "6%",   size: 46, rotate: -22, delay: "0.9s",  dur: "6s",   opacity: 0.10 },
+    { cardNum: 41, top: "85%",  right: "8%",  size: 42, rotate: 10,  delay: "1.5s",  dur: "8.5s", opacity: 0.08 },
+    { cardNum: 12, top: "25%",  right: "12%", size: 38, rotate: -5,  delay: "2.4s",  dur: "7s",   opacity: 0.07 },
+    { cardNum: 20, top: "60%",  left: "8%",   size: 40, rotate: 18,  delay: "0.3s",  dur: "6.8s", opacity: 0.09 },
+    { cardNum: 36, top: "45%",  right: "2%",  size: 52, rotate: -12, delay: "1.8s",  dur: "7.2s", opacity: 0.10 },
+    { cardNum: 48, top: "92%",  left: "15%",  size: 36, rotate: 25,  delay: "3s",    dur: "6.2s", opacity: 0.07 },
+    { cardNum: 5,  top: "18%",  left: "14%",  size: 34, rotate: -28, delay: "2.1s",  dur: "8s",   opacity: 0.06 },
+    { cardNum: 29, top: "68%",  right: "15%", size: 38, rotate: 8,   delay: "0.7s",  dur: "7.8s", opacity: 0.08 },
+  ];
+
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-[0]">
+      {cards.map((c, i) => {
+        const ext = c.cardNum === 6 ? "png" : "jpeg";
+        return (
+          <div
+            key={i}
+            className="absolute"
+            style={{
+              top: c.top,
+              left: c.left,
+              right: c.right,
+              width: c.size,
+              height: c.size * 1.45,
+              opacity: c.opacity,
+              transform: `rotate(${c.rotate}deg)`,
+              animation: `loteria-card-float ${c.dur} ease-in-out infinite`,
+              animationDelay: c.delay,
+            }}
+          >
+            <img
+              src={`/cards/${String(c.cardNum).padStart(2, "0")}.${ext}`}
+              alt=""
+              className="h-full w-full rounded-md object-cover"
+              style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }}
+              loading="lazy"
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

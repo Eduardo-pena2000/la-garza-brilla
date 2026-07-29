@@ -73,14 +73,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Lotería La Garza" },
+      { name: "description", content: "Lotería La Garza - Juego de Lotería en línea" },
+      { name: "author", content: "La Garza" },
+      { property: "og:title", content: "Lotería La Garza" },
+      { property: "og:description", content: "Juega Lotería La Garza en línea con tus amigos." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:site", content: "@LoteríaLaGarza" },
     ],
     links: [
       {
@@ -111,6 +111,16 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    // Clear all local storage when the app starts so it always behaves like a fresh install
+    // for client testing purposes (tutorial shown, no saved tables, no saved name)
+    try {
+      localStorage.clear();
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

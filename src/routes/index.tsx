@@ -3,6 +3,7 @@ import { useState } from "react";
 import { User } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
 import { BrandLogo } from "@/components/BrandLogo";
+import { BrandTitle } from "@/components/BrandTitle";
 import { NameModal } from "@/components/NameModal";
 
 export const Route = createFileRoute("/")({
@@ -26,14 +27,7 @@ function LoginPage() {
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-10 pt-16">
         <BrandLogo size={220} />
 
-        <h1 className="mt-6 text-center text-3xl font-extrabold tracking-wide animate-slide-up-soft" style={{ animationDelay: "0.2s" }}>
-          Lotería <span className="text-[color:var(--brand-cyan)]">La Garza</span>
-        </h1>
-        <p className="mt-1 text-center text-sm text-white/70 animate-slide-up-soft" style={{ animationDelay: "0.3s" }}>
-          Reúne a tu gente y juega online
-        </p>
-
-        <div className="mt-10 flex w-full flex-col gap-3">
+        <div className="mt-8 flex w-full flex-col gap-3">
           <button
             type="button"
             className="group relative flex h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-white text-[15px] font-semibold text-[color:var(--brand-navy-dark)] shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.5)] active:scale-[0.98] animate-slide-up-soft"

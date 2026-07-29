@@ -14,6 +14,7 @@ import {
   Zap,
   Sparkles,
   Timer,
+  Share2,
 } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
 import { getCard } from "@/lib/deck";
@@ -254,6 +255,29 @@ function MesaPage() {
             ) : (
               <Copy className="h-4 w-4 text-white/80" />
             )}
+          </button>
+        </section>
+
+        {/* Invite friends */}
+        <section className="animate-slide-up-soft mt-4">
+          <button 
+            onClick={async () => {
+              try {
+                if (navigator.share) {
+                  await navigator.share({
+                    title: "Lotería La Garza",
+                    text: `¡Únete a mi mesa de Lotería!`,
+                    url: window.location.href,
+                  });
+                } else {
+                  navigator.clipboard.writeText(window.location.href);
+                  alert("¡Enlace copiado al portapapeles!");
+                }
+              } catch (e) {}
+            }}
+            className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white font-bold py-3.5 rounded-2xl border border-white/20 shadow-lg active:scale-95 transition-all"
+          >
+            <Share2 className="w-5 h-5" /> Invitar amigos
           </button>
         </section>
 

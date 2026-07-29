@@ -1,17 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Gift, Crown, Zap, Image as ImageIcon, Star } from "lucide-react";
 import { CoinAnimation } from "@/components/CoinAnimation";
 
-export const Route = createFileRoute("/tienda")({
-  head: () => ({
-    meta: [{ title: "Tienda — Lotería La Garza" }],
-  }),
-  component: TiendaPage,
-});
-
-function TiendaPage() {
-  const navigate = useNavigate();
+export function TiendaView({ onBack }: { onBack?: () => void }) {
   const [coins, setCoins] = useState(0);
   const [ownedItems, setOwnedItems] = useState<string[]>([]);
 
@@ -44,18 +35,22 @@ function TiendaPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-[100dvh] font-sans relative overflow-x-hidden bg-[color:var(--brand-navy-deep)] text-white">
+    <div className="flex flex-col h-full font-sans relative overflow-x-hidden text-white">
       {/* Background glow effects */}
       <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-[color:var(--brand-cyan)]/20 to-transparent pointer-events-none" />
       
       {/* Header Fijo */}
       <header className="sticky top-0 z-50 flex items-center justify-between p-4 bg-[color:var(--brand-navy-deep)]/90 backdrop-blur-md border-b border-white/10 shadow-lg">
-        <button
-          onClick={() => navigate({ to: "/menu" })}
-          className="p-2 -ml-2 rounded-xl bg-white/5 active:scale-95 transition-transform"
-        >
-          <ChevronLeft className="w-7 h-7 text-white" />
-        </button>
+        {onBack ? (
+          <button
+            onClick={onBack}
+            className="p-2 -ml-2 rounded-xl bg-white/5 active:scale-95 transition-transform"
+          >
+            <ChevronLeft className="w-7 h-7 text-white" />
+          </button>
+        ) : (
+          <div className="w-11" />
+        )}
         <h1 className="text-xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-[color:var(--brand-gold)] to-yellow-600 uppercase">
           La Tienda
         </h1>
@@ -66,9 +61,9 @@ function TiendaPage() {
       </header>
 
       {/* Main Content (Scrollable) */}
-      <main className="flex-1 overflow-y-auto pb-20 p-5 space-y-10">
+      <main className="flex-1 overflow-y-auto pb-28 p-5 space-y-10">
 
-        {/* SECTION: Comprar Monedas (Mockup) */}
+        {/* SECTION: Comprar Monedas */}
         <section className="animate-slide-up-soft">
           <h2 className="flex items-center justify-center gap-2 text-sm font-black text-white/50 mb-4 tracking-[0.2em] uppercase">
             <span className="h-px w-8 bg-white/20" />
