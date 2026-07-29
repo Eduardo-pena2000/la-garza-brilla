@@ -33,6 +33,17 @@ function LoginPage() {
             <div aria-hidden className="absolute inset-x-0 top-0 h-1.5 sarape-band animate-sarape-slide" />
             <div aria-hidden className="absolute inset-x-0 bottom-0 h-1.5 sarape-band animate-sarape-slide" />
 
+            <div className="mx-auto mb-6 h-36 w-36">
+              <BrandLogo className="drop-shadow-xl" />
+            </div>
+            
+            <BrandTitle size="md" />
+            <p className="mt-3 text-[15px] leading-relaxed text-white/90">
+              Crea tu mesa, invita a tus amigos y que gane el mejor.
+            </p>
+          </div>
+        </div>
+
         <div className="mt-8 flex w-full flex-col gap-3">
           <button
             type="button"
