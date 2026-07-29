@@ -24,24 +24,14 @@ function LoginPage() {
 
   return (
     <BrandBackground>
-      <PapelPicado />
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-10 pt-24">
-        {/* Marco tipo talavera con el wordmark */}
-        <div className="relative w-full animate-pop-in">
-          <div className="pointer-events-none absolute -inset-3 rounded-[2rem] opacity-70 blur-2xl" style={{ background: "radial-gradient(60% 60% at 50% 40%, var(--brand-pink), transparent 70%)" }} />
-          <div className="relative overflow-hidden rounded-[1.75rem] border border-white/20 bg-white/5 px-5 py-8 text-center backdrop-blur-sm shadow-[var(--shadow-brand)]">
-            <div aria-hidden className="absolute inset-x-0 top-0 h-1.5 sarape-band animate-sarape-slide" />
-            <div aria-hidden className="absolute inset-x-0 bottom-0 h-1.5 sarape-band animate-sarape-slide" />
-
-            <div className="mx-auto mb-6 h-36 w-36">
-              <BrandLogo className="drop-shadow-xl" />
-            </div>
-            
-            <p className="mt-3 text-[15px] leading-relaxed text-white/90">
-              Crea tu mesa, invita a tus amigos y que gane el mejor.
-            </p>
-          </div>
+        <div className="mx-auto mb-10 h-64 w-64 animate-pop-in">
+          <BrandLogo size={256} className="drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]" />
         </div>
+        
+        <p className="mb-4 text-center text-[15px] leading-relaxed text-white/90 animate-slide-up-soft" style={{ animationDelay: "0.2s" }}>
+          Crea tu mesa, invita a tus amigos y que gane el mejor.
+        </p>
 
         <div className="mt-8 flex w-full flex-col gap-3">
           <button
