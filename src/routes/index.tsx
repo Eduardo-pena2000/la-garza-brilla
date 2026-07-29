@@ -37,7 +37,6 @@ function LoginPage() {
               <BrandLogo className="drop-shadow-xl" />
             </div>
             
-            <BrandTitle size="md" />
             <p className="mt-3 text-[15px] leading-relaxed text-white/90">
               Crea tu mesa, invita a tus amigos y que gane el mejor.
             </p>
