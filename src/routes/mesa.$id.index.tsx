@@ -17,6 +17,7 @@ import {
   Share2,
 } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
+import { PapelPicado } from "@/components/Fiesta";
 import { getCard } from "@/lib/deck";
 import { ref, onValue, update } from "firebase/database";
 import { database } from "@/lib/firebase";
@@ -181,17 +182,18 @@ function MesaPage() {
 
   return (
     <BrandBackground>
-      <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-5">
+      <PapelPicado count={7} />
+      <header className="relative z-30 flex items-center justify-between gap-3 px-4 pt-16">
         <button
           type="button"
           aria-label="Volver"
           onClick={() => navigate({ to: "/menu" })}
-          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/15 backdrop-blur transition hover:bg-white/20 active:scale-95"
+          className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 ring-1 ring-[color:var(--brand-gold)]/40 backdrop-blur transition hover:bg-white/20 active:scale-95"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <span
-          className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-white ring-1 ring-white/20 backdrop-blur"
+          className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-white ring-1 ring-[color:var(--brand-gold)]/40 backdrop-blur"
         >
           <span
             className="h-2 w-2 rounded-full animate-pulse"

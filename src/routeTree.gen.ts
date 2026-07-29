@@ -12,6 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as AbrirMesaRouteImport } from './routes/abrir-mesa'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AbrirMesaRouteImport } from './routes/abrir-mesa'
+import { Route as ConfiguracionRouteImport } from './routes/configuracion'
+import { Route as MenuRouteImport } from './routes/menu'
+import { Route as TablasRouteImport } from './routes/tablas'
+import { Route as TiendaRouteImport } from './routes/tienda'
 import { Route as MesaIdRouteImport } from './routes/mesa.$id'
 import { Route as MesaIdIndexRouteImport } from './routes/mesa.$id.index'
 import { Route as MesaIdJugarRouteImport } from './routes/mesa.$id.jugar'
@@ -26,9 +31,24 @@ const AbrirMesaRoute = AbrirMesaRouteImport.update({
   path: '/abrir-mesa',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const ConfiguracionRoute = ConfiguracionRouteImport.update({
+  id: '/configuracion',
+  path: '/configuracion',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MenuRoute = MenuRouteImport.update({
+  id: '/menu',
+  path: '/menu',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TablasRoute = TablasRouteImport.update({
+  id: '/tablas',
+  path: '/tablas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TiendaRoute = TiendaRouteImport.update({
+  id: '/tienda',
+  path: '/tienda',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MesaIdRoute = MesaIdRouteImport.update({
@@ -115,11 +135,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AbrirMesaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/configuracion': {
+      id: '/configuracion'
+      path: '/configuracion'
+      fullPath: '/configuracion'
+      preLoaderRoute: typeof ConfiguracionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/menu': {
+      id: '/menu'
+      path: '/menu'
+      fullPath: '/menu'
+      preLoaderRoute: typeof MenuRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tablas': {
+      id: '/tablas'
+      path: '/tablas'
+      fullPath: '/tablas'
+      preLoaderRoute: typeof TablasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tienda': {
+      id: '/tienda'
+      path: '/tienda'
+      fullPath: '/tienda'
+      preLoaderRoute: typeof TiendaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mesa/$id': {
