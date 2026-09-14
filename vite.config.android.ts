@@ -3,16 +3,24 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
+import path from "path";
 
 export default defineConfig({
+  root: 'android-entry',
   plugins: [
-    TanStackRouterVite(),
+    TanStackRouterVite({ routesDirectory: path.resolve(__dirname, 'src/routes'), generatedRouteTree: path.resolve(__dirname, 'src/routeTree.gen.ts') }),
     react(),
     tailwindcss(),
-    tsconfigPaths(),
+    tsconfigPaths({ root: path.resolve(__dirname) }),
   ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      '~': path.resolve(__dirname),
+    }
+  },
   build: {
-    outDir: 'dist',
-    emptyOutDir: true
+    outDir: path.resolve(__dirname, 'dist'),
+    emptyOutDir: true,
   }
 });
