@@ -84,7 +84,7 @@ function checkWin(mode: Mode, size: Size, cards: number[], isMarked: (c: number)
   }
   if (mode === "sieteLoco") {
     // Implementación temporal, puedes definir una forma específica si lo prefieres
-    return marked.size >= 7; 
+    return cards.filter(isMarked).length >= 7; 
   }
   if (mode === "modoX") {
     const diag1 = grid.every((row, i) => isMarked(row[i]));
@@ -419,7 +419,6 @@ function JugarPage() {
       <div className="flex flex-col min-h-[100dvh] font-sans relative overflow-hidden bg-white/5">
         
         {/* Modals & Overlays */}
-        <AnimatePresence>
           {activeModal === "exitConfirm" && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
               <div className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 ring-1 ring-white/10 shadow-2xl animate-pop-in border border-white/20 text-center">
@@ -455,7 +454,6 @@ function JugarPage() {
               </div>
             </div>
           )}
-        </AnimatePresence>
 
         {/* Tutorial Overlay */}
         {showTutorial && (
@@ -507,7 +505,6 @@ function JugarPage() {
               <button  
                 onClick={() => {
                   setWinDismissed(true);
-                  setWon(false);
                   update(ref(database, `mesas/${id}`), { serverPaused: false }).catch(() => {});
                   if (isHost) setPaused(false);
                 }} 
@@ -517,9 +514,25 @@ function JugarPage() {
               </button>
               
               {isHost && (
-                <button onClick={restart} className="w-full bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-full text-lg shadow-lg active:scale-95">
-                  Nueva partida
-                </button>
+                <>
+                  <div className="flex justify-between items-center bg-white/5 rounded-2xl p-4 border border-white/10 mb-4 animate-slide-up-soft">
+                    <span className="text-white font-bold">Estado de la mesa</span>
+                    <span className="bg-white/10 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-white/20">
+                      {mesa?.status}
+                    </span>
+                  </div>
+                  {mesa?.status === "abierta" && (
+                    <button 
+                      onClick={() => update(ref(database, `mesas/${id}`), { status: "en-juego" })}
+                      className="w-full bg-[color:var(--brand-gold)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-full text-lg shadow-[0_0_20px_rgba(255,215,0,0.3)] hover:scale-[1.02] active:scale-95 transition-all mb-4"
+                    >
+                      Comenzar Partida
+                    </button>
+                  )}
+                  <button onClick={restart} className="w-full bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-full text-lg shadow-lg active:scale-95">
+                    Nueva partida
+                  </button>
+                </>
               )}
               
               <button onClick={() => navigate({ to: "/mesa/$id", params: { id: mesa.id } })} className="w-full bg-transparent text-white/50 font-bold py-2 mt-2 rounded-full text-sm hover:text-white active:scale-95 transition-colors">
@@ -992,10 +1005,9 @@ function JugarPage() {
           )}
 
           <button 
-            onClick={isHost ? drawNext : undefined}
-            disabled={won || drawnIdx >= deck.length - 1}
+            disabled={true}
             className={`flex-1 text-[color:var(--brand-navy-deep)] font-extrabold py-3 rounded-full shadow-md text-sm sm:text-base tracking-wide transition-transform ${
-              !isHost ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-[color:var(--brand-gold)] active:scale-95"
+              !isHost ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-white/20 text-white/50 cursor-not-allowed"
             }`}
           >
             {isHost ? (drawnIdx < 0 ? "INICIAR" : "Corre y se va corriendo") : "Esperando al anfitrión"}

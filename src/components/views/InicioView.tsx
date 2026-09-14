@@ -24,9 +24,10 @@ export function InicioView({
   onOpenSidebar,
   onOpenPlayModal
 }: { 
-  onNavigateTienda: () => void;
+  onNavigateTienda: () => void; 
   onNavigateTablas: () => void;
   onOpenSidebar: () => void;
+  onOpenPlayModal?: () => void;
 }) {
   const navigate = useNavigate();
   const [name, setName] = useState("Invitado");
@@ -330,8 +331,7 @@ export function InicioView({
           ))}
         </div>
       </section>
-
-      <NameModal />
+      {/* Menu / Nav Tab Bar Placeholder si quisieras agregarlo aquí, o ya viene de Menu.tsx */}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { nitro } from "nitro/vite";
 
 export default defineConfig({
   plugins: [
+    // @ts-expect-error tanstackStart typing issue
     tanstackStart({ ssr: false }),
     nitro(),
     react(),
