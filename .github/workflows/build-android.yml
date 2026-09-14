@@ -32,7 +32,7 @@ jobs:
         run: bun install
 
       - name: Build Web App
-        run: bun run build
+        run: bun run build:android
 
       - name: Sync Capacitor
         run: bunx cap sync android

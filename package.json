@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite dev --host",
     "build": "vite build",
+    "build:android": "vite build -c vite.config.android.ts",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",

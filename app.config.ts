@@ -2,6 +2,10 @@ import { defineConfig } from '@tanstack/react-start/config'
 
 export default defineConfig({
   server: {
-    preset: 'vercel',
+    preset: 'static',
+    prerender: {
+      routes: ['/'],
+      crawlLinks: true
+    }
   },
 })
