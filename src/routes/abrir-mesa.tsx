@@ -17,9 +17,12 @@ import {
   PlusCircle,
   PartyPopper,
   AlertCircle,
+  CircleDot,
+  X,
 } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
 import { PapelPicado } from "@/components/Fiesta";
+import { MiniBoardIllustration } from "@/components/MiniBoardIllustration";
 import { getCard } from "@/lib/deck";
 import { ref, push, set } from "firebase/database";
 import { database } from "@/lib/firebase";
@@ -35,7 +38,7 @@ export const Route = createFileRoute("/abrir-mesa")({
 });
 
 type Size = "4x4" | "5x5";
-type Mode = "clasico" | "relampago" | "chorro" | "lleno";
+type Mode = "normal" | "pozo" | "esquinas" | "sieteLoco" | "modoX";
 
 interface Tabla {
   id: string;
@@ -72,10 +75,11 @@ function randomCards(size: Size): number[] {
 const STEPS = ["Nombre", "Modo", "Tablas", "Acceso", "Elegir"] as const;
 
 const MODES: { id: Mode; label: string; hint: string; icon: React.ComponentType<{ className?: string }>; gradient: string }[] = [
-  { id: "clasico", label: "Clásico", hint: "Cuatro en línea, columna, fila o diagonal.", icon: Trophy, gradient: "var(--gradient-card-cyan)" },
-  { id: "relampago", label: "Relámpago", hint: "Ronda rápida, cartas más veloces.", icon: Zap, gradient: "var(--gradient-card-pink)" },
-  { id: "chorro", label: "Chorro", hint: "Cuatro esquinas para ganar.", icon: Sparkles, gradient: "var(--gradient-card-gold)" },
-  { id: "lleno", label: "Tabla llena", hint: "Rellena toda la tabla para ganar.", icon: LayoutGrid, gradient: "var(--gradient-card-teal)" },
+  { id: "normal", label: "Normal", hint: "Llena toda la tabla, o línea, columna, fila o diagonal.", icon: Trophy, gradient: "var(--gradient-card-cyan)" },
+  { id: "pozo", label: "Pozo", hint: "Grupo de cartas en el centro de la tabla.", icon: CircleDot, gradient: "var(--gradient-card-pink)" },
+  { id: "esquinas", label: "4 Esquinas", hint: "Las 4 esquinas de la tabla.", icon: LayoutGrid, gradient: "var(--gradient-card-gold)" },
+  { id: "sieteLoco", label: "7 Loco", hint: "Siete cartas específicas en la tabla.", icon: Zap, gradient: "var(--gradient-card-teal)" },
+  { id: "modoX", label: "Modo X", hint: "Forma una 'X' en la tabla.", icon: X, gradient: "var(--gradient-card-pink)" },
 ];
 
 function AbrirMesaPage() {
@@ -83,9 +87,10 @@ function AbrirMesaPage() {
   const [step, setStep] = useState(0);
 
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<Mode>("clasico");
+  const [mode, setMode] = useState<Mode>("normal");
   const [size, setSize] = useState<Size>("4x4");
   const [perPlayer, setPerPlayer] = useState(2);
+  const [cost, setCost] = useState(10);
   const [locked, setLocked] = useState(false);
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -165,18 +170,25 @@ function AbrirMesaPage() {
         mode,
         size,
         perPlayer,
+        cost,
         locked,
         password: locked ? password : "",
         tablaIds: selected,
         host: hostName || "Anfitrión",
-        players: hostName ? [{ name: hostName, role: "host" as const }] : [],
+        players: hostName ? { [hostName]: { name: hostName, role: "host" as const, tablesCount: perPlayer, ready: true } } : {},
         status: "abierta" as const,
+        prizePool: 0,
         createdAt: Date.now(),
       };
 
       await set(newMesaRef, mesa);
       setError("");
-      setCreatedMesa({ id: mesa.id, name: mesa.name });
+      try {
+        localStorage.setItem(`garza:host:${mesaId}`, "true");
+      } catch {
+        /* ignore */
+      }
+      navigate({ to: "/mesa/$id", params: { id: mesa.id } });
     } catch (err) {
       console.error(err);
       setError("No se pudo conectar con el servidor para guardar la mesa.");
@@ -246,6 +258,8 @@ function AbrirMesaPage() {
             onSize={setSize}
             perPlayer={perPlayer}
             onPerPlayer={setPerPlayer}
+            cost={cost}
+            onCost={setCost}
           />
         )}
         {step === 3 && (
@@ -276,15 +290,6 @@ function AbrirMesaPage() {
         </div>
       )}
       </main>
-
-      {createdMesa && (
-        <SuccessOverlay
-          mesaName={createdMesa.name}
-          host={hostName || "Anfitrión"}
-          onGoMesa={() => navigate({ to: "/mesa/$id", params: { id: createdMesa.id } })}
-          onClose={() => navigate({ to: "/menu" })}
-        />
-      )}
 
       {/* Bottom action bar */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[oklch(0.10_0.09_262)/.85] px-5 pb-5 pt-3 backdrop-blur-xl">
@@ -429,10 +434,11 @@ function StepMode({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void 
                 <div className={`text-[15px] font-bold ${active ? "text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.3)]" : "text-white"}`}>
                   {m.label}
                 </div>
-                <div className={`text-[12px] ${active ? "text-white/85" : "text-white/60"}`}>
+                <div className={`text-[12px] pr-2 ${active ? "text-white/85" : "text-white/60"}`}>
                   {m.hint}
                 </div>
               </div>
+              <MiniBoardIllustration mode={m.id} active={active} />
               {active && (
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-white/95 text-[color:var(--brand-navy-deep)]">
                   <Check className="h-4 w-4" />
@@ -451,11 +457,15 @@ function StepTablas({
   onSize,
   perPlayer,
   onPerPlayer,
+  cost,
+  onCost,
 }: {
   size: Size;
   onSize: (s: Size) => void;
   perPlayer: number;
   onPerPlayer: (n: number) => void;
+  cost: number;
+  onCost: (n: number) => void;
 }) {
   return (
     <div className="animate-slide-up-soft">
@@ -503,6 +513,37 @@ function StepTablas({
           <button
             type="button"
             onClick={() => onPerPlayer(Math.min(6, perPlayer + 1))}
+            className="h-11 w-11 rounded-full bg-white/10 text-lg font-bold text-white ring-1 ring-white/15 transition hover:bg-white/20 active:scale-95"
+          >
+            +
+          </button>
+        </div>
+
+        <div className="mt-8 flex items-baseline justify-between">
+          <span className="text-sm font-semibold text-white/80">Costo por tabla</span>
+          <div className="flex items-center gap-1">
+            <span className="text-3xl font-extrabold text-[color:var(--brand-gold)]">{cost}</span>
+            <span className="text-sm font-bold text-[color:var(--brand-gold)]/80 mt-1">monedas</span>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onCost(Math.max(0, cost - 5))}
+            className="h-11 w-11 rounded-full bg-white/10 text-lg font-bold text-white ring-1 ring-white/15 transition hover:bg-white/20 active:scale-95"
+          >
+            −
+          </button>
+          <div className="relative flex-1">
+            <div className="h-2 rounded-full bg-white/10" />
+            <div
+              className="absolute inset-y-0 left-0 h-2 rounded-full bg-[color:var(--brand-gold)]"
+              style={{ width: `${Math.min(100, (cost / 100) * 100)}%` }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => onCost(cost + 5)}
             className="h-11 w-11 rounded-full bg-white/10 text-lg font-bold text-white ring-1 ring-white/15 transition hover:bg-white/20 active:scale-95"
           >
             +
@@ -711,13 +752,13 @@ function MiniGrid({ cards, size }: { cards: number[]; size: Size }) {
   const cols = size === "4x4" ? 4 : 5;
   return (
     <div
-      className="grid gap-[3px] overflow-hidden rounded-xl"
+      className="grid gap-[3px]"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {cards.map((n, i) => {
         const card = getCard(n);
         return (
-          <div key={i} className="relative aspect-[3/4] overflow-hidden rounded-md">
+          <div key={i} className="relative aspect-[3/4]">
             <img
               src={card?.image}
               alt={card?.name ?? `Carta ${n}`}

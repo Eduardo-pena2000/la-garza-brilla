@@ -93,7 +93,7 @@ function MainTabsLayout() {
 
         {/* Section 4: Perfil */}
         <div className="w-screen h-full shrink-0 snap-center">
-          <PerfilView />
+          <PerfilView onNavigateTienda={() => scrollToTab(3)} />
         </div>
       </div>
 

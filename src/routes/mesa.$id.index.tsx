@@ -1,5 +1,7 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { database } from "@/lib/firebase";
+import { onValue, ref, update, remove } from "firebase/database";
 import {
   ArrowLeft,
   Users,
@@ -15,12 +17,13 @@ import {
   Sparkles,
   Timer,
   Share2,
+  CircleDot,
+  X,
 } from "lucide-react";
-import { BrandBackground } from "@/components/BrandBackground";
-import { PapelPicado } from "@/components/Fiesta";
 import { getCard } from "@/lib/deck";
-import { ref, onValue, update } from "firebase/database";
-import { database } from "@/lib/firebase";
+import { BrandBackground } from "@/components/BrandBackground";
+import { MiniBoardIllustration } from "@/components/MiniBoardIllustration";
+import { PapelPicado } from "@/components/Fiesta";
 
 export const Route = createFileRoute("/mesa/$id/")({
   head: () => ({
@@ -33,7 +36,7 @@ export const Route = createFileRoute("/mesa/$id/")({
 });
 
 type Size = "4x4" | "5x5";
-type Mode = "clasico" | "relampago" | "chorro" | "lleno";
+type Mode = "normal" | "pozo" | "esquinas" | "sieteLoco" | "modoX";
 type Status = "abierta" | "en-juego" | "terminada";
 
 interface Tabla {
@@ -46,6 +49,8 @@ interface Tabla {
 interface Player {
   name: string;
   role: "host" | "guest";
+  tablesCount: number;
+  ready: boolean;
 }
 
 interface Mesa {
@@ -54,12 +59,14 @@ interface Mesa {
   mode: Mode;
   size: Size;
   perPlayer: number;
+  cost?: number;
   locked: boolean;
   password: string;
   tablaIds: string[];
   host: string;
-  players: Player[];
+  players: Record<string, Player>;
   status: Status;
+  prizePool?: number;
   createdAt: number;
 }
 
@@ -67,10 +74,11 @@ const MESAS_KEY = "garza:mesas";
 const TABLAS_KEY = "garza:tablas";
 
 const MODE_META: Record<Mode, { label: string; hint: string; icon: React.ComponentType<{ className?: string }> }> = {
-  clasico: { label: "Clásico", hint: "Cuatro en línea", icon: Trophy },
-  relampago: { label: "Relámpago", hint: "Ronda rápida", icon: Zap },
-  chorro: { label: "Chorro", hint: "Cuatro esquinas", icon: Sparkles },
-  lleno: { label: "Tabla llena", hint: "Toda la tabla", icon: LayoutGrid },
+  normal: { label: "Normal", hint: "Llena la tabla o línea", icon: Trophy },
+  pozo: { label: "Pozo", hint: "Grupo al centro", icon: CircleDot },
+  esquinas: { label: "4 Esquinas", hint: "Las cuatro esquinas", icon: LayoutGrid },
+  sieteLoco: { label: "7 Loco", hint: "Patrón de 7 cartas", icon: Zap },
+  modoX: { label: "Modo X", hint: "Forma una X", icon: X },
 };
 
 const STATUS_META: Record<Status, { label: string; color: string }> = {
@@ -97,6 +105,14 @@ function MesaPage() {
   const [tablas, setTablas] = useState<Tabla[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [isChangingMode, setIsChangingMode] = useState(false);
+  const [isChangingTablas, setIsChangingTablas] = useState(false);
+  const [tempSelectedTablas, setTempSelectedTablas] = useState<string[]>([]);
+
+  const myName = typeof window !== "undefined" ? localStorage.getItem("garza:name") || "Jugador" : "Jugador";
+  const playersList = Object.values(mesa?.players || {});
+  const me = playersList.find((p) => p.name === myName);
+  const isHostInLobby = (me?.role === "host") || (typeof window !== "undefined" && localStorage.getItem(`garza:host:${id}`) === "true") || mesa?.host === myName;
 
   useEffect(() => {
     setTablas(loadTablas());
@@ -105,8 +121,8 @@ function MesaPage() {
     const unsubscribe = onValue(mesaRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        // Ensure players array exists
-        if (!data.players) data.players = [];
+        // Ensure players object exists
+        if (!data.players) data.players = {};
         setMesa(data as Mesa);
       } else {
         setMesa(null);
@@ -116,6 +132,16 @@ function MesaPage() {
 
     return () => unsubscribe();
   }, [id]);
+
+  useEffect(() => {
+    if (mesa && myName && id) {
+      const playerRef = ref(database, `mesas/${id}/players/${myName}`);
+      update(playerRef, {
+        name: myName,
+        role: mesa.host === myName ? "host" : "guest",
+      });
+    }
+  }, [mesa?.id, myName, id, mesa?.host]);
 
   const mesaTablas = useMemo(() => {
     if (!mesa) return [];
@@ -145,6 +171,47 @@ function MesaPage() {
     } catch (e) {
       console.error(e);
     }
+  }
+
+  async function updateMode(newMode: Mode) {
+    if (!mesa) return;
+    try {
+      await update(ref(database, `mesas/${id}`), { mode: newMode });
+      setIsChangingMode(false);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function updateTablas() {
+    if (!mesa || tempSelectedTablas.length === 0 || tempSelectedTablas.length > mesa.perPlayer) return;
+    try {
+      localStorage.setItem(`garza:selectedTablas:${id}`, JSON.stringify(tempSelectedTablas));
+      await update(ref(database, `mesas/${id}/players/${myName}`), { tablesCount: tempSelectedTablas.length, ready: true });
+      setIsChangingTablas(false);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function toggleTempTabla(tablaId: string) {
+    if (!mesa) return;
+    setTempSelectedTablas(prev => {
+      if (prev.includes(tablaId)) return prev.filter(x => x !== tablaId);
+      if (prev.length >= mesa.perPlayer) return [...prev.slice(1), tablaId];
+      return [...prev, tablaId];
+    });
+  }
+
+  function openTablasModal() {
+    if (!mesa) return;
+    try {
+      const saved = localStorage.getItem(`garza:selectedTablas:${id}`);
+      setTempSelectedTablas(saved ? JSON.parse(saved) : []);
+    } catch {
+      setTempSelectedTablas([]);
+    }
+    setIsChangingTablas(true);
   }
 
   if (loading) {
@@ -224,10 +291,23 @@ function MesaPage() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <Stat label="Modo" value={MODE_META[mesa.mode].label} />
-            <Stat label="Tabla" value={mesa.size} />
-            <Stat label="Por jug." value={String(mesa.perPlayer)} />
+          <div className={`mt-5 grid ${isHostInLobby ? "grid-cols-2" : "grid-cols-1"} gap-2 text-center`}>
+            {isHostInLobby && (
+              <button
+                onClick={() => setIsChangingMode(true)}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-2 py-3 ring-1 ring-white/15 backdrop-blur hover:bg-white/20 active:scale-95 transition-all text-sm font-bold text-white shadow-sm"
+              >
+                <Zap className="w-4 h-4 text-white/70" />
+                Cambiar modo
+              </button>
+            )}
+            <button
+              onClick={openTablasModal}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-2 py-3 ring-1 ring-white/15 backdrop-blur hover:bg-white/20 active:scale-95 transition-all text-sm font-bold text-white shadow-sm"
+            >
+              <LayoutGrid className="w-4 h-4 text-white/70" />
+              Cambiar tablas
+            </button>
           </div>
         </section>
 
@@ -292,21 +372,21 @@ function MesaPage() {
                 Jugadores
               </h2>
             </div>
-            <span className="text-xs text-white/50">{mesa.players.length}</span>
+            <span className="text-xs text-white/50">{playersList.length}</span>
           </div>
           <div className="space-y-2">
-            {mesa.players.map((p, i) => (
+            {playersList.map((p, i) => (
               <div
                 key={`${p.name}-${i}`}
                 className="flex items-center gap-3 rounded-2xl bg-white/5 px-4 py-3 ring-1 ring-white/10"
               >
-                <div
-                  className="grid h-10 w-10 place-items-center rounded-full text-sm font-bold text-white ring-2 ring-white/20"
-                  style={{ background: "var(--gradient-card-cyan)" }}
-                >
-                  {p.name.slice(0, 1).toUpperCase()}
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--brand-cyan)] text-lg font-bold text-[color:var(--brand-navy-deep)]">
+                  {p.name.charAt(0).toUpperCase()}
                 </div>
-                <span className="flex-1 truncate text-sm font-semibold text-white">{p.name}</span>
+                <div className="flex flex-1 flex-col truncate">
+                  <span className="font-bold text-white truncate">{p.name}</span>
+                  <span className="text-[11px] text-white/50">{p.role === "host" ? "Anfitrión" : "Invitado"} {p.tablesCount ? `• ${p.tablesCount} tablas` : ''}</span>
+                </div>
                 {p.role === "host" && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--brand-gold)/.2] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--brand-gold)] ring-1 ring-[color:var(--brand-gold)/.4]">
                     <Crown className="h-3 w-3" /> Anfitrión
@@ -314,7 +394,7 @@ function MesaPage() {
                 )}
               </div>
             ))}
-            {Array.from({ length: Math.max(0, 4 - mesa.players.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, 4 - playersList.length) }).map((_, i) => (
               <div
                 key={`empty-${i}`}
                 className="flex items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-3 text-white/40"
@@ -382,6 +462,101 @@ function MesaPage() {
           </button>
         </div>
       </div>
+
+      {/* MODALS */}
+      {isChangingMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-pop-in">
+          <div className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white">Cambiar Modo</h3>
+              <button onClick={() => setIsChangingMode(false)} className="text-white/50 hover:text-white p-1">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              {(Object.entries(MODE_META) as [Mode, typeof MODE_META[Mode]][]).map(([modeKey, meta]) => (
+                <button
+                  key={modeKey}
+                  onClick={() => updateMode(modeKey)}
+                  className={`w-full flex items-center gap-4 rounded-2xl p-4 text-left transition-all ${mesa.mode === modeKey ? 'bg-white/10 ring-2 ring-[color:var(--brand-cyan)] shadow-md' : 'bg-white/5 ring-1 ring-white/10 hover:bg-white/10 active:scale-95'}`}
+                >
+                  <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${mesa.mode === modeKey ? 'bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)]' : 'bg-white/10 text-white'}`}>
+                    <meta.icon className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-bold text-white text-base">{meta.label}</div>
+                    <div className="text-xs text-white/60">{meta.hint}</div>
+                  </div>
+                  <MiniBoardIllustration mode={modeKey as Mode} active={mesa.mode === modeKey} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isChangingTablas && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-[color:var(--brand-navy-deep)] animate-slide-up-soft">
+          <header className="flex items-center justify-between px-4 py-4 bg-black/20 border-b border-white/10 shrink-0">
+            <button onClick={() => setIsChangingTablas(false)} className="p-2 text-white/70 hover:text-white"><ArrowLeft className="w-6 h-6" /></button>
+            <div className="flex flex-col items-center">
+              <h2 className="text-white font-bold text-lg leading-tight">Cambiar Tablas</h2>
+              <span className="text-[10px] text-[color:var(--brand-cyan)] uppercase tracking-wider">Elige {mesa.perPlayer} {mesa.perPlayer === 1 ? 'tabla' : 'tablas'}</span>
+            </div>
+            <button 
+              onClick={updateTablas}
+              disabled={tempSelectedTablas.length !== mesa.perPlayer}
+              className="px-3 py-1.5 rounded-full text-xs font-bold text-white disabled:opacity-50 disabled:bg-white/10 transition-all shadow-md"
+              style={{ background: tempSelectedTablas.length === mesa.perPlayer ? "var(--gradient-brand)" : undefined }}
+            >
+              Guardar
+            </button>
+          </header>
+          
+          <div className="flex-1 overflow-y-auto p-4">
+            {tablas.filter(t => t.size === mesa.size).length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center p-6 opacity-70">
+                <LayoutGrid className="w-12 h-12 mb-4 text-white/50" />
+                <p className="text-white font-bold mb-2">No tienes tablas de tamaño {mesa.size}</p>
+                <p className="text-sm text-white/60">Ve al menú principal y crea algunas tablas nuevas para poder jugar.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 pb-32">
+                {tablas.filter(t => t.size === mesa.size).map((t, i) => {
+                  const isSelected = tempSelectedTablas.includes(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => toggleTempTabla(t.id)}
+                      className={`relative flex flex-col items-center rounded-3xl p-3 ring-1 transition-all active:scale-[0.98] ${
+                        isSelected
+                          ? "bg-[color:var(--brand-cyan)]/10 ring-[color:var(--brand-cyan)] shadow-[0_0_15px_rgba(0,255,255,0.2)] scale-[1.02]"
+                          : "bg-white/5 ring-white/10 hover:bg-white/10"
+                      }`}
+                    >
+                      <div className="mb-2 flex w-full items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-white/50">
+                          Tabla {i + 1}
+                        </span>
+                        <div
+                          className={`grid h-5 w-5 place-items-center rounded-full border ${
+                            isSelected
+                              ? "border-[color:var(--brand-cyan)] bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)]"
+                              : "border-white/20 bg-black/20"
+                          }`}
+                        >
+                          {isSelected && <Check className="h-3 w-3" />}
+                        </div>
+                      </div>
+                      <TablaPreview cards={t.cards} size={t.size} />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </BrandBackground>
   );
 }
@@ -405,7 +580,7 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
       {cards.map((c, i) => {
         const card = getCard(c);
         return (
-          <div key={i} className="relative aspect-[3/4] overflow-hidden rounded-md ring-1 ring-white/10">
+          <div key={i} className="relative aspect-[3/4] ring-1 ring-white/10">
             <img
               src={card?.image}
               alt={card?.name ?? `Carta ${c}`}

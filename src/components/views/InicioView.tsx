@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Plus, Star, ChevronRight, Layers, Pointer, Menu } from "lucide-react";
+import { Plus, Star, ChevronRight, Layers, Pointer, Menu, Users, Coins } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { ref, onValue } from "firebase/database";
+import { database } from "@/lib/firebase";
 import cardsFan from "@/assets/cards-fan.png";
 import trophy from "@/assets/trophy.png";
 import featureJoin from "@/assets/feature-join.png";
@@ -31,6 +33,24 @@ export function InicioView({
   const [coins, setCoins] = useState(500);
   const [isVIP, setIsVIP] = useState(false);
   const [isTutorial, setIsTutorial] = useState(false);
+  const [publicMesas, setPublicMesas] = useState<any[]>([]);
+
+  useEffect(() => {
+    const mesasRef = ref(database, "mesas");
+    const unsubscribe = onValue(mesasRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const publicList = Object.values(data)
+          .filter((m: any) => m.status === "abierta" && !m.locked)
+          .sort((a: any, b: any) => b.createdAt - a.createdAt)
+          .slice(0, 4); // Limit to latest 4
+        setPublicMesas(publicList);
+      } else {
+        setPublicMesas([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const loadState = () => {
@@ -220,39 +240,58 @@ export function InicioView({
         </div>
       </section>
 
-      {/* Friends */}
-      <section className={`mt-5 relative z-10 shrink-0 ${isTutorial ? "opacity-30 pointer-events-none" : ""}`}>
-        <div className="flex items-center justify-between px-4">
-          <h2 className="text-base font-bold">Amigos jugando</h2>
-          <button className="flex items-center gap-1 text-sm text-muted-foreground hover:text-white transition">
-            Ver todos <ChevronRight className="size-4" />
+      {/* Public Mesas */}
+      <section className={`mt-5 relative z-10 shrink-0 mb-10 ${isTutorial ? "opacity-30 pointer-events-none" : ""}`}>
+        <div className="flex items-center justify-between px-4 mb-3">
+          <h2 className="text-base font-bold text-white">Mesas públicas</h2>
+          <button 
+            onClick={() => navigate({ to: "/unirse" })}
+            className="flex items-center gap-1 text-sm text-white/50 hover:text-white transition"
+          >
+            Ver todas <ChevronRight className="size-4" />
           </button>
         </div>
-        <div className="mt-2 grid grid-cols-4 gap-2 px-4">
-          {friends.map((f) => (
-            <div
-              key={f.name}
-              className="surface-card flex flex-col items-center gap-1 rounded-2xl p-2 text-center"
-            >
-              <img
-                src={f.img}
-                alt={f.name}
-                width={512}
-                height={512}
-                loading="lazy"
-                className="size-12 rounded-full object-cover ring-2 ring-transparent hover:ring-[color:var(--brand-cyan)] transition"
-              />
-              <span className="text-xs font-bold">{f.name}</span>
-              <span className="flex items-center gap-1 text-[9px] leading-tight text-muted-foreground">
-                <span className="size-1.5 rounded-full bg-[color:var(--success)]" />
-                En línea
-              </span>
-              <button className="btn-gold mt-1 w-full rounded-full py-1 text-[11px] font-bold hover:scale-105 active:scale-95 transition">
-                Unirse
-              </button>
+        
+        {publicMesas.length > 0 ? (
+          <div className="flex overflow-x-auto gap-3 px-4 pb-4 hide-scrollbar snap-x">
+            {publicMesas.map((m) => {
+              const playersCount = m.players ? Object.keys(m.players).length : 0;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => navigate({ to: "/mesa/$id", params: { id: m.id } })}
+                  className="surface-card flex flex-col gap-2 rounded-2xl p-3 text-left transition active:scale-95 border border-white/5 w-48 shrink-0 snap-start shadow-[var(--shadow-card)]"
+                >
+                  <div className="flex items-start justify-between gap-1 w-full">
+                    <span className="text-sm font-bold text-white leading-tight truncate">{m.name}</span>
+                    <span className="flex items-center gap-1 rounded-full bg-[color:var(--brand-cyan)]/20 px-1.5 py-0.5 text-[9px] font-bold text-[color:var(--brand-cyan)] shrink-0">
+                      <Users className="size-3" /> {playersCount}/4
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1 text-[10px] text-white/60">
+                    <span>Host: {m.host}</span>
+                    <span>Modo: {m.mode === "normal" ? "Normal" : "Pozo"} ({m.size})</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between w-full pt-2 border-t border-white/5">
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-[color:var(--brand-gold)]">
+                      <Coins className="size-3" /> {m.cost} c/u
+                    </span>
+                    <span className="text-[9px] uppercase font-bold bg-white/10 px-2 py-1 rounded-full text-white/80">
+                      Entrar
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-3 px-4">
+            <div className="surface-card rounded-2xl p-4 text-center border border-white/5 border-dashed">
+              <p className="text-sm font-bold text-white/60">No hay mesas públicas disponibles</p>
+              <p className="text-xs text-white/40 mt-1">¡Crea una nueva partida e invita a tus amigos!</p>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </section>
 
       {/* Collections */}

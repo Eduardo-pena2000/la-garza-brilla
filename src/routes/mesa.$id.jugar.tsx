@@ -3,28 +3,30 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Pause, Play, Settings2, MessageCircle, Users, RotateCcw,
   Timer as TimerIcon, Heart, Image as ImageIcon, Triangle, X, Send,
-  Menu, Info, Trophy, Link as LinkIcon, Edit2, Share2
+  Menu, Info, Trophy, Link as LinkIcon, Edit2, Share2, LayoutGrid, Check, CircleDot, Zap
 } from "lucide-react";
 import { DECK, getCard } from "@/lib/deck";
 import { ref, onValue, update, push, set, onDisconnect } from "firebase/database";
 import { database } from "@/lib/firebase";
 import { BrandBackground } from "@/components/BrandBackground";
 import { CoinAnimation } from "@/components/CoinAnimation";
+import { MiniBoardIllustration } from "@/components/MiniBoardIllustration";
+import { increment } from "firebase/database";
 
 export const Route = createFileRoute("/mesa/$id/jugar")({
   component: JugarPage,
 });
 
 type Size = "4x4" | "5x5";
-type Mode = "clasico" | "relampago" | "chorro" | "lleno";
+type Mode = "normal" | "pozo" | "esquinas" | "sieteLoco" | "modoX";
 
 interface Tabla {
   id: string; size: Size; cards: number[]; createdAt: number;
 }
 interface Mesa {
-  id: string; name: string; mode: Mode; size: Size; perPlayer: number;
+  id: string; name: string; mode: Mode; size: Size; perPlayer: number; cost?: number;
   tablaIds: string[]; host: string; status: string; deck?: number[];
-  drawnIdx?: number; players?: Record<string, boolean>;
+  drawnIdx?: number; players?: Record<string, any>; prizePool?: number;
 }
 interface ChatMsg {
   id: string; text: string; sender: string; timestamp: number;
@@ -50,23 +52,45 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function speedFor(mode: Mode): number {
-  switch (mode) {
-    case "relampago": return 2500; case "chorro": return 3500;
-    case "lleno": return 4500; default: return 4000;
-  }
+  return 3000;
 }
 
-function checkWin(mode: Mode, size: Size, cards: number[], marked: Set<number>): boolean {
+const MODE_META: Record<Mode, { label: string; hint: string; icon: React.ComponentType<{ className?: string }> }> = {
+  normal: { label: "Normal", hint: "Llena la tabla o línea", icon: Trophy },
+  pozo: { label: "Pozo", hint: "Grupo al centro", icon: CircleDot },
+  esquinas: { label: "4 Esquinas", hint: "Las cuatro esquinas", icon: LayoutGrid },
+  sieteLoco: { label: "7 Loco", hint: "Patrón de 7 cartas", icon: Zap },
+  modoX: { label: "Modo X", hint: "Forma una X", icon: X },
+};
+
+function checkWin(mode: Mode, size: Size, cards: number[], isMarked: (c: number) => boolean): boolean {
   const n = size === "4x4" ? 4 : 5;
   const grid = Array.from({ length: n }, (_, r) => cards.slice(r * n, (r + 1) * n));
-  const isMarked = (c: number) => marked.has(c);
 
-  if (mode === "lleno") return cards.every(isMarked);
-  if (mode === "chorro") return [grid[0][0], grid[0][n - 1], grid[n - 1][0], grid[n - 1][n - 1]].every(isMarked);
-  for (let r = 0; r < n; r++) if (grid[r].every(isMarked)) return true;
-  for (let c = 0; c < n; c++) if (grid.every((row) => isMarked(row[c]))) return true;
-  if (grid.every((row, i) => isMarked(row[i]))) return true;
-  if (grid.every((row, i) => isMarked(row[n - 1 - i]))) return true;
+  if (mode === "normal") {
+    if (cards.every(isMarked)) return true;
+    for (let r = 0; r < n; r++) if (grid[r].every(isMarked)) return true;
+    for (let c = 0; c < n; c++) if (grid.every((row) => isMarked(row[c]))) return true;
+    if (grid.every((row, i) => isMarked(row[i]))) return true;
+    if (grid.every((row, i) => isMarked(row[n - 1 - i]))) return true;
+    return false;
+  }
+  if (mode === "pozo") {
+    if (n === 4) return [grid[1][1], grid[1][2], grid[2][1], grid[2][2]].every(isMarked);
+    return [grid[1][1], grid[1][2], grid[1][3], grid[2][1], grid[2][2], grid[2][3], grid[3][1], grid[3][2], grid[3][3]].every(isMarked);
+  }
+  if (mode === "esquinas") {
+    return [grid[0][0], grid[0][n - 1], grid[n - 1][0], grid[n - 1][n - 1]].every(isMarked);
+  }
+  if (mode === "sieteLoco") {
+    // Implementación temporal, puedes definir una forma específica si lo prefieres
+    return marked.size >= 7; 
+  }
+  if (mode === "modoX") {
+    const diag1 = grid.every((row, i) => isMarked(row[i]));
+    const diag2 = grid.every((row, i) => isMarked(row[n - 1 - i]));
+    return diag1 && diag2;
+  }
   return false;
 }
 
@@ -88,10 +112,24 @@ function JugarPage() {
   const [mesa, setMesa] = useState<Mesa | null>(null);
   const [tablasActivas, setTablasActivas] = useState<Tabla[]>([]);
   const [loading, setLoading] = useState(true);
-  const [marked, setMarked] = useState<Set<number>>(new Set());
-  const [paused, setPaused] = useState(true);
   const [won, setWon] = useState(false);
-  const timerRef = useRef<number | null>(null);
+  const [winDismissed, setWinDismissed] = useState(false);
+  const [roundPaid, setRoundPaid] = useState(false);
+  
+  const [coins, setCoins] = useState(() => {
+    if (typeof window === "undefined") return 1000;
+    const c = localStorage.getItem("garza:coins");
+    return c ? parseInt(c, 10) : 1000;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("garza:coins", coins.toString());
+    }
+  }, [coins]);
+
+  const [marked, setMarked] = useState<Set<string>>(new Set());
+  const [paused, setPaused] = useState(true);
   
   const [settings, setSettings] = useState({
     audio: true, effects: true, confetti: true, vibration: true, marker: "/markers/ifrijol.png", voice: "default"
@@ -116,7 +154,7 @@ function JugarPage() {
   
   // Scratch Interaction
   const [interaction, setInteraction] = useState<{
-    cardId: number;
+    uid: string;
     startX: number;
     startY: number;
     curX: number;
@@ -125,10 +163,10 @@ function JugarPage() {
   } | null>(null);
 
   // Modals state
-  const [activeModal, setActiveModal] = useState<"chat"|"players"|"settings"|"tablas"|"modos"|"stickers"|"menu"|null>(null);
+  const [activeModal, setActiveModal] = useState<"chat"|"players"|"settings"|"tablas"|"modos"|"stickers"|"menu"|"exitConfirm"|null>(null);
 
   const userName = typeof window !== "undefined" ? localStorage.getItem("garza:name") || "Jugador" : "Jugador";
-  const isHost = mesa?.host === userName;
+  const isHost = (typeof window !== "undefined" && localStorage.getItem(`garza:host:${id}`) === "true") || mesa?.host === userName;
 
   useEffect(() => {
     const mesaRef = ref(database, `mesas/${id}`);
@@ -144,8 +182,16 @@ function JugarPage() {
         // Initialize boards if not loaded yet
         setTablasActivas(prev => {
           if (prev.length > 0) return prev;
-          const loaded = loadTablas();
-          return loaded.slice(0, data.perPlayer || 1);
+          const allTablas = loadTablas().filter(t => t.size === data.size);
+          try {
+            const savedSelected = localStorage.getItem(`garza:selectedTablas:${id}`);
+            if (savedSelected) {
+              const ids = JSON.parse(savedSelected) as string[];
+              const selected = ids.map(tid => allTablas.find(t => t.id === tid)).filter(Boolean) as Tabla[];
+              if (selected.length > 0) return selected;
+            }
+          } catch {}
+          return allTablas.slice(0, data.perPlayer || 1);
         });
 
       } else {
@@ -171,11 +217,16 @@ function JugarPage() {
     });
 
     const playerRef = ref(database, `mesas/${id}/players/${userName}`);
-    set(playerRef, true);
-    onDisconnect(playerRef).remove();
+    update(playerRef, {
+      name: userName,
+      role: isHost ? "host" : "guest",
+    }).catch(() => {});
+    
+    const discRef = onDisconnect(playerRef);
+    discRef.remove();
 
     return () => {
-      unsubscribe(); unsubscribeChat(); set(playerRef, null);
+      unsubscribe(); unsubscribeChat(); discRef.cancel();
     };
   }, [id, isHost, userName]);
 
@@ -203,62 +254,73 @@ function JugarPage() {
 
   const drawn = drawnIdx >= 0 ? getCard(deck[drawnIdx]) : null;
 
-  const drawNext = useCallback(async () => {
-    if (!isHost) return;
-    const nextIdx = drawnIdx + 1;
-    if (nextIdx < deck.length) {
-      const mesaRef = ref(database, `mesas/${id}`);
-      await update(mesaRef, { drawnIdx: nextIdx });
+  useEffect(() => {
+    if (drawnIdx === -1) {
+      setWon(false);
+      setWinDismissed(false);
+      setMarked(new Set());
+      setRoundPaid(false);
     }
-  }, [drawnIdx, deck.length, isHost, id]);
+  }, [drawnIdx]);
 
   useEffect(() => {
-    if (paused || won || !mesa || !isHost) return;
-    const speed = speedFor(mesa.mode);
-    timerRef.current = window.setTimeout(drawNext, speed);
-    return () => { if (timerRef.current) window.clearTimeout(timerRef.current); };
-  }, [paused, drawnIdx, mesa, drawNext, won, isHost]);
+    if (drawnIdx === 0 && !roundPaid && tablasActivas.length > 0 && mesa) {
+      const myCost = tablasActivas.length * (mesa.cost || 10);
+      setCoins(prev => prev - myCost);
+      setRoundPaid(true);
+      update(ref(database, `mesas/${id}`), { prizePool: increment(myCost) }).catch(() => {});
+    }
+  }, [drawnIdx, roundPaid, tablasActivas.length, mesa?.cost, id]);
 
   useEffect(() => {
-    if (!mesa || tablasActivas.length === 0) return;
-    const hasWin = tablasActivas.some(t => checkWin(mesa.mode, t.size, t.cards, marked));
+    if (!mesa || tablasActivas.length === 0 || winDismissed || won) return;
+    const hasWin = tablasActivas.some(t => checkWin(mesa.mode, t.size, t.cards, (c) => marked.has(`${t.id}-${c}`)));
     if (hasWin) {
       setWon(true);
-      setPaused(true);
+      
+      // Award prize
+      if (mesa.prizePool && mesa.prizePool > 0) {
+         setCoins(prev => prev + mesa.prizePool!);
+         update(ref(database, `mesas/${id}`), { prizePool: 0, serverPaused: true }).catch(() => {});
+      } else {
+         update(ref(database, `mesas/${id}`), { serverPaused: true }).catch(() => {});
+      }
+
+      if (isHost) setPaused(true);
       if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
       if (settings.vibration && navigator.vibrate) navigator.vibrate([500, 200, 500]);
     }
-  }, [marked, mesa, tablasActivas, settings]);
+  }, [marked, mesa, tablasActivas, settings, winDismissed, won, isHost]);
 
-  function toggleMark(card: number) {
+  function toggleMark(tablaId: string, card: number) {
     if (won) return;
-    const drawnSet = new Set(deck.slice(0, drawnIdx + 1));
-    if (!drawnSet.has(card)) return;
+    const currentDrawnCard = deck[drawnIdx];
+    if (currentDrawnCard !== card) return; // Sólo marcar si es la carta actual
+
     setMarked((prev) => {
+      const markKey = `${tablaId}-${card}`;
+      if (prev.has(markKey)) return prev; // No se puede retirar la marca
+
       const next = new Set(prev);
-      if (next.has(card)) {
-        next.delete(card);
-      } else {
-        next.add(card);
-        if (settings.effects) new Audio("/audio/effects/pop.mp3").play().catch(() => {});
-        if (settings.vibration && navigator.vibrate) navigator.vibrate(50);
-      }
+      next.add(markKey);
+      if (settings.effects) new Audio("/audio/effects/pop.mp3").play().catch(() => {});
+      if (settings.vibration && navigator.vibrate) navigator.vibrate(50);
       return next;
     });
   }
 
   // --- SCRATCH INTERACTION HANDLERS ---
-  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>, c: number) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>, tablaId: string, c: number) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    setInteraction({ cardId: c, startX: x, startY: y, curX: x, curY: y, isScratching: false });
+    setInteraction({ uid: `${tablaId}-${c}`, startX: x, startY: y, curX: x, curY: y, isScratching: false });
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>, c: number) => {
-    if (!interaction || interaction.cardId !== c) return;
+  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>, tablaId: string, c: number) => {
+    if (!interaction || interaction.uid !== `${tablaId}-${c}`) return;
     
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -276,11 +338,11 @@ function JugarPage() {
     }
   };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>, c: number) => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>, tablaId: string, c: number) => {
     e.currentTarget.releasePointerCapture(e.pointerId);
-    if (interaction && interaction.cardId === c) {
+    if (interaction && interaction.uid === `${tablaId}-${c}`) {
       if (!interaction.isScratching) {
-        toggleMark(c);
+        toggleMark(tablaId, c);
       }
       setInteraction(null);
     }
@@ -289,11 +351,13 @@ function JugarPage() {
 
 
   async function restart() {
-    if (!isHost) return;
+    if (!isHost || !mesa) return;
     const newDeck = shuffle(DECK.map((c) => c.n));
-    const mesaRef = ref(database, `mesas/${id}`);
-    await update(mesaRef, { deck: newDeck, drawnIdx: -1 });
-    setMarked(new Set()); setWon(false); setPaused(true);
+    await update(ref(database, `mesas/${id}`), { deck: newDeck, drawnIdx: -1, status: "abierta", serverPaused: false });
+    setMarked(new Set());
+    setWon(false);
+    setWinDismissed(false);
+    setPaused(true);
     setActiveModal(null);
   }
 
@@ -324,7 +388,28 @@ function JugarPage() {
   }
 
   if (loading) return <BrandBackground><div className="grid min-h-[100dvh] place-items-center text-white">Cargando...</div></BrandBackground>;
-  if (!mesa || tablasActivas.length === 0) return <BrandBackground><div className="grid min-h-[100dvh] place-items-center text-white">Tablas no disponibles</div></BrandBackground>;
+  
+  if (!mesa || tablasActivas.length === 0) {
+    return (
+      <BrandBackground>
+        <div className="flex flex-col min-h-[100dvh] items-center justify-center p-6 text-center">
+          <LayoutGrid className="w-16 h-16 text-white/50 mb-4" />
+          <h2 className="text-2xl font-black text-white mb-2">Tablas no disponibles</h2>
+          <p className="text-white/70 mb-8 max-w-sm">
+            {!mesa 
+              ? "No se pudo cargar la mesa."
+              : `No tienes tablas guardadas del tamaño requerido (${mesa.size}). Ve al menú principal y crea una.`}
+          </p>
+          <button 
+            onClick={() => navigate({ to: "/menu" })}
+            className="w-full max-w-xs bg-white/10 text-white font-bold py-4 rounded-full text-lg hover:bg-white/20 active:scale-95 shadow-md border border-white/20 transition-all"
+          >
+            Ir al menú principal
+          </button>
+        </div>
+      </BrandBackground>
+    );
+  }
 
   const timeSecs = speedFor(mesa.mode) / 1000;
   const connectedPlayers = mesa.players ? Object.keys(mesa.players) : [mesa.host];
@@ -333,11 +418,50 @@ function JugarPage() {
     <BrandBackground>
       <div className="flex flex-col min-h-[100dvh] font-sans relative overflow-hidden bg-white/5">
         
+        {/* Modals & Overlays */}
+        <AnimatePresence>
+          {activeModal === "exitConfirm" && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 ring-1 ring-white/10 shadow-2xl animate-pop-in border border-white/20 text-center">
+                <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mx-auto mb-4 border border-red-500/30">
+                  <ArrowLeft className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-black text-white mb-2">
+                  {isHost ? "¿Abandonar la mesa?" : "¿Abandonar la partida?"}
+                </h2>
+                <p className="text-white/70 mb-6 text-sm">
+                  {isHost 
+                    ? "Si abandonas la partida ahora, perderás tus monedas invertidas de esta ronda. El servidor seguirá sacando las cartas automáticamente para los demás jugadores hasta que termine la ronda."
+                    : "Si abandonas la partida ahora, perderás tu progreso en las tablas y las monedas que invertiste en esta ronda."}
+                </p>
+                
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => {
+                      setActiveModal(null);
+                      navigate({ to: "/menu" });
+                    }}
+                    className="w-full bg-red-500 text-white font-bold py-3.5 rounded-xl hover:bg-red-600 active:scale-95 transition-all shadow-md"
+                  >
+                    Sí, abandonar partida
+                  </button>
+                  <button
+                    onClick={() => setActiveModal(null)}
+                    className="w-full bg-white/10 text-white font-bold py-3.5 rounded-xl hover:bg-white/20 active:scale-95 transition-all"
+                  >
+                    Cancelar y seguir jugando
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </AnimatePresence>
+
         {/* Tutorial Overlay */}
         {showTutorial && (
           <div className="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm animate-pop-in px-6 pb-20">
             <div className="relative mb-6">
-              <div className="w-24 h-36 bg-white/20 rounded-xl shadow-2xl border-2 border-white/50 rotate-[-5deg] backdrop-blur-sm" />
+              <div className="w-24 h-36 bg-white/20 shadow-2xl border-2 border-white/50 rotate-[-5deg] backdrop-blur-sm" />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="relative animate-scratch-hand z-10 scale-125">
                   <div className="text-7xl drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]">👇</div>
@@ -369,16 +493,37 @@ function JugarPage() {
         {won && (
           <div className="absolute inset-0 z-50 bg-[color:var(--brand-navy-deep)]/80 flex items-center justify-center p-6 backdrop-blur-sm">
             {settings.confetti && <div className="absolute inset-0 pointer-events-none bg-[url('https://cdn-icons-png.flaticon.com/512/1795/1795325.png')] bg-[length:50px] animate-confetti-fall opacity-40"></div>}
-            <div className="bg-[color:var(--brand-navy)] p-6 rounded-3xl shadow-2xl text-center border-2 border-[color:var(--brand-gold)] w-full max-w-sm animate-pop-in relative z-10">
+            <div className="bg-[color:var(--brand-navy)] p-6 rounded-3xl shadow-2xl text-center border-2 border-[color:var(--brand-gold)] w-full max-w-sm animate-pop-in relative z-10 flex flex-col gap-3">
               <h2 className="text-5xl font-black text-[color:var(--brand-gold)] mb-2 drop-shadow-md">¡Lotería!</h2>
-              <p className="text-white mb-6">Has ganado la partida.</p>
+              <p className="text-white mb-2 font-medium">Has ganado la partida.</p>
+              
+              <div className="bg-white/5 rounded-2xl p-4 mb-2 border border-white/10">
+                <span className="text-white/60 text-xs uppercase tracking-wider font-bold block mb-1">Premio Obtenido</span>
+                <span className="text-[color:var(--brand-gold)] text-4xl font-black flex items-center justify-center gap-2">
+                  🪙 {mesa?.prizePool || 0}
+                </span>
+              </div>
+              
+              <button  
+                onClick={() => {
+                  setWinDismissed(true);
+                  setWon(false);
+                  update(ref(database, `mesas/${id}`), { serverPaused: false }).catch(() => {});
+                  if (isHost) setPaused(false);
+                }} 
+                className="w-full bg-white/10 text-white font-black py-4 rounded-full text-lg hover:bg-white/20 active:scale-95 shadow-md transition-all border border-white/20"
+              >
+                Seguir jugando
+              </button>
+              
               {isHost && (
-                <button onClick={restart} className="w-full bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-full mb-3 text-lg shadow-lg active:scale-95">
-                  Jugar de nuevo
+                <button onClick={restart} className="w-full bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-full text-lg shadow-lg active:scale-95">
+                  Nueva partida
                 </button>
               )}
-              <button onClick={() => navigate({ to: "/mesa/$id", params: { id: mesa.id } })} className="w-full bg-white/10 text-white font-bold py-3 rounded-full text-lg hover:bg-white/20 active:scale-95">
-                Salir
+              
+              <button onClick={() => navigate({ to: "/mesa/$id", params: { id: mesa.id } })} className="w-full bg-transparent text-white/50 font-bold py-2 mt-2 rounded-full text-sm hover:text-white active:scale-95 transition-colors">
+                Salir de la mesa
               </button>
             </div>
           </div>
@@ -423,7 +568,10 @@ function JugarPage() {
                           value={settings.voice}
                           onChange={(e) => setSettings({...settings, voice: e.target.value})}
                         >
-                          {VOICES.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                          {VOICES
+                            .filter(v => v.id === "default" || localStorage.getItem(`garza:unlocked:voice:${v.id}`) === "true")
+                            .map(v => <option key={v.id} value={v.id}>{v.name}</option>)
+                          }
                         </select>
                       </div>
                       <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-lg border border-white/10">
@@ -474,8 +622,8 @@ function JugarPage() {
                         </button>
                       )}
                       {stickerTab === "cartas" && DECK.map((c) => (
-                        <button key={`carta-${c.n}`} onClick={() => sendChat(`[STICKER:${c.image}]`)} className="aspect-[1/1.55] bg-transparent hover:bg-white/10 rounded transition-colors active:scale-95 flex items-center justify-center p-1 border border-white/5">
-                          <img src={c.image} className="w-full h-full object-fill drop-shadow-md rounded-sm" loading="lazy" alt={c.name} />
+                        <button key={`carta-${c.n}`} onClick={() => sendChat(`[STICKER:${c.image}]`)} className="aspect-[1/1.55] bg-transparent hover:bg-white/10 transition-colors active:scale-95 flex items-center justify-center p-1 border border-white/5">
+                          <img src={c.image} className="w-full h-full object-fill drop-shadow-md" loading="lazy" alt={c.name} />
                         </button>
                       ))}
                     </div>
@@ -534,32 +682,83 @@ function JugarPage() {
 
                       {activeModal === "tablas" && (
                         <div className="flex flex-col gap-3">
-                          {isGameStarted && <p className="text-[color:var(--brand-gold)] text-sm text-center mb-2 font-bold">La partida ya inició. Aplica para la siguiente.</p>}
-                          {loadTablas().map((t, idx) => {
+                          {isGameStarted && <p className="text-[color:var(--brand-gold)] text-sm text-center mb-2 font-bold">No puedes cambiar de tablas durante una partida en curso.</p>}
+                          <div className="grid grid-cols-2 gap-4">
+                            {loadTablas().filter(t => t.size === mesa.size).map((t, idx) => {
                             const isActiva = tablasActivas.some(act => act.id === t.id);
                             return (
-                              <button key={t.id} onClick={() => { 
+                              <button key={t.id} disabled={isGameStarted} onClick={() => { 
                                   // toggle this table
                                   let newActive = [...tablasActivas];
                                   if (isActiva) {
-                                    newActive = newActive.filter(act => act.id !== t.id);
+                                    // If perPlayer is 1, we don't let them uncheck to 0, they must just tap another.
+                                    if (mesa.perPlayer > 1) {
+                                      newActive = newActive.filter(act => act.id !== t.id);
+                                    }
                                   } else {
-                                    if (newActive.length < mesa.perPlayer) newActive.push(t);
+                                    if (newActive.length < mesa.perPlayer) {
+                                      newActive.push(t);
+                                    } else {
+                                      // If at max capacity, replace the first one
+                                      newActive = [...newActive.slice(1), t];
+                                    }
                                   }
                                   if (newActive.length > 0) {
                                     setTablasActivas(newActive);
                                     setMarked(new Set());
+                                    // Auto close if we reached the required amount
+                                    if (newActive.length === mesa.perPlayer) {
+                                      setActiveModal(null);
+                                    }
                                   }
                                 }}
-                                className={`p-4 rounded-xl border text-left flex justify-between items-center transition-colors shadow-sm ${
-                                  isActiva ? 'bg-white/20 border-white' : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                className={`relative flex flex-col items-center rounded-3xl p-3 ring-1 transition-all ${!isGameStarted && 'active:scale-[0.98]'} ${isGameStarted ? 'opacity-50 cursor-not-allowed' : ''} ${
+                                  isActiva
+                                    ? "bg-[color:var(--brand-cyan)]/10 ring-[color:var(--brand-cyan)] shadow-[0_0_15px_rgba(0,255,255,0.2)] scale-[1.02]"
+                                    : "bg-white/5 ring-white/10 hover:bg-white/10"
                                 }`}
                               >
-                                <span className="text-white font-bold text-lg">Tabla {idx + 1} <span className="text-white/50 text-sm ml-2">({t.size})</span></span>
-                                {isActiva && <span className="text-[color:var(--brand-gold)] text-xs font-black uppercase tracking-wider">Activa</span>}
+                                <div className="mb-2 flex w-full items-center justify-between">
+                                  <span className="text-[11px] font-bold uppercase tracking-widest text-white/50">
+                                    Tabla {idx + 1}
+                                  </span>
+                                  <div
+                                    className={`grid h-5 w-5 place-items-center rounded-full border ${
+                                      isActiva
+                                        ? "border-[color:var(--brand-cyan)] bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)]"
+                                        : "border-white/20 bg-black/20"
+                                    }`}
+                                  >
+                                    {isActiva && <Check className="h-3 w-3" />}
+                                  </div>
+                                </div>
+                                <div
+                                  className="grid gap-1 w-full"
+                                  style={{ gridTemplateColumns: `repeat(${t.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}
+                                >
+                                  {t.cards.map((c, i) => {
+                                    const card = getCard(c);
+                                    return (
+                                      <div key={i} className="relative aspect-[3/4] ring-1 ring-white/10">
+                                        <img
+                                          src={card?.image}
+                                          alt={card?.name ?? `Carta ${c}`}
+                                          loading="lazy"
+                                          className="h-full w-full object-cover"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </button>
                             );
                           })}
+                          {loadTablas().filter(t => t.size === mesa.size).length === 0 && (
+                            <div className="col-span-2 text-center text-white/50 py-4">
+                              No tienes tablas de tamaño {mesa.size}.
+                            </div>
+                          )}
+                          </div>
                         </div>
                       )}
 
@@ -568,19 +767,22 @@ function JugarPage() {
                           {!isHost ? (
                             <p className="text-white/70 text-center font-bold">Solo el anfitrión decide.</p>
                           ) : isGameStarted ? (
-                            <p className="text-[color:var(--brand-gold)] text-center font-bold">Espera a que acabe la partida.</p>
+                            <p className="text-[color:var(--brand-gold)] text-center font-bold">No puedes cambiar de modo durante una partida en curso.</p>
                           ) : (
-                            (["clasico", "relampago", "chorro", "lleno"] as Mode[]).map(m => (
-                              <button key={m} onClick={() => handleChangeMode(m)}
-                                className={`p-4 rounded-xl border text-left capitalize transition-colors shadow-sm flex items-center justify-between ${
-                                  mesa.mode === m ? 'bg-[color:var(--brand-cyan)]/20 border-[color:var(--brand-cyan)]' : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                }`}
+                            (Object.entries(MODE_META) as [Mode, typeof MODE_META[Mode]][]).map(([modeKey, meta]) => (
+                              <button
+                                key={modeKey}
+                                onClick={() => handleChangeMode(modeKey)}
+                                className={`w-full flex items-center gap-4 rounded-2xl p-4 text-left transition-all ${mesa.mode === modeKey ? 'bg-white/10 ring-2 ring-[color:var(--brand-cyan)] shadow-md' : 'bg-white/5 ring-1 ring-white/10 hover:bg-white/10 active:scale-95'}`}
                               >
-                                <div>
-                                  <span className="text-white font-black text-lg">{m}</span>
-                                  <p className="text-white/60 text-sm mt-0.5 font-medium">Cronómetro: {speedFor(m)/1000}s</p>
+                                <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${mesa.mode === modeKey ? 'bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)]' : 'bg-white/10 text-white'}`}>
+                                  <meta.icon className="w-6 h-6" />
                                 </div>
-                                {mesa.mode === m && <div className="w-3 h-3 bg-[color:var(--brand-cyan)] rounded-full shadow-[0_0_10px_var(--brand-cyan)]" />}
+                                <div className="flex-1">
+                                  <div className="font-bold text-white text-base">{meta.label}</div>
+                                  <div className="text-xs text-white/60">{meta.hint}</div>
+                                </div>
+                                <MiniBoardIllustration mode={modeKey as Mode} active={mesa.mode === modeKey} />
                               </button>
                             ))
                           )}
@@ -630,9 +832,21 @@ function JugarPage() {
         {/* TOP HEADER */}
         <header className="h-14 bg-[color:var(--brand-navy-deep)] flex items-center justify-between px-3 shrink-0 z-30 relative shadow-md">
           <span aria-hidden className="absolute inset-x-0 bottom-0 h-1.5 sarape-band animate-sarape-slide" />
-          <button onClick={() => navigate({ to: "/mesa/$id", params: { id: mesa.id } })} className="p-2 -ml-2 text-white/80 active:scale-95 hover:text-white transition">
+          <button onClick={() => setActiveModal("exitConfirm")} className="p-2 -ml-2 text-white/80 active:scale-95 hover:text-white transition">
             <ArrowLeft className="w-6 h-6" strokeWidth={2.5} />
           </button>
+          
+          <div className="flex flex-1 items-center gap-2 ml-2 text-[10px] font-bold">
+            <div className="flex items-center gap-1 bg-black/40 rounded-full px-2 py-1 border border-white/10 shadow-inner">
+              <span>🪙</span>
+              <span className="text-[color:var(--brand-gold)]">{coins}</span>
+            </div>
+            <div className="flex items-center gap-1 bg-[color:var(--brand-gold)]/20 rounded-full px-2 py-1 border border-[color:var(--brand-gold)]/40">
+              <span>🏆</span>
+              <span className="text-[color:var(--brand-gold)]">{mesa?.prizePool || 0}</span>
+            </div>
+          </div>
+          
           <div className="flex items-center gap-4 text-[color:var(--brand-cyan)]">
             <button onClick={isHost ? restart : undefined} className="active:scale-95 hover:text-white transition hidden sm:block">
               <RotateCcw className="w-6 h-6" strokeWidth={2.5} />
@@ -684,12 +898,14 @@ function JugarPage() {
         </div>
 
         {/* ABSOLUTE DECK CARD */}
-        <div className="absolute right-2 top-[180px] z-20 w-[64px] h-[96px] bg-white/10 p-1 rounded-lg shadow-2xl border border-white/20 transform rotate-2 backdrop-blur-md">
-          {drawn ? (
-            <img src={drawn.image} alt={drawn.name} className="w-full h-full object-fill animate-pop-in rounded-md" />
-          ) : (
-            <div className="w-full h-full bg-red-600 rounded-md border border-red-800 flex flex-col items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
-          )}
+        <div className="absolute right-2 top-[180px] z-20 w-[64px] h-[96px] bg-white/10 p-1 shadow-2xl border border-white/20 transform rotate-2 backdrop-blur-md">
+          <div className="w-full h-full relative">
+            {drawn ? (
+              <img src={drawn.image} alt={drawn.name} className="w-full h-full object-fill animate-pop-in" />
+            ) : (
+              <div className="w-full h-full bg-red-600 border border-red-800 flex flex-col items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
+            )}
+          </div>
         </div>
         {/* MAIN GAME BOARD */}
         <main className="flex-1 relative p-4 pt-8 pb-32 flex justify-center items-center overflow-y-auto z-10 w-full">
@@ -699,24 +915,24 @@ function JugarPage() {
                'grid-cols-2'
              }`}>
                {tablasActivas.map(tablaItem => (
-                 <div key={tablaItem.id} className="bg-white/10 p-1.5 sm:p-2 rounded-2xl shadow-2xl backdrop-blur-md w-full max-w-[360px] h-fit border border-white/20 relative">
+                 <div key={tablaItem.id} className="bg-white/10 p-1.5 sm:p-2 shadow-2xl backdrop-blur-md w-full max-w-[360px] h-fit border border-white/20 relative">
                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[color:var(--brand-navy-deep)] px-3 py-0.5 rounded-full border border-[color:var(--brand-cyan)]/30 text-[10px] text-[color:var(--brand-cyan)] font-bold tracking-widest shadow-md">
                      TABLA {tablaItem.id.slice(0, 4).toUpperCase()}
                    </div>
-                   <div className="grid gap-[2px] bg-white/20 border-2 border-white/10 rounded-xl overflow-hidden mt-1" style={{ gridTemplateColumns: `repeat(${tablaItem.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}>
+                   <div className="grid gap-[2px] bg-white/20 border-2 border-white/10 mt-1" style={{ gridTemplateColumns: `repeat(${tablaItem.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}>
                      {tablaItem.cards.map((c, idx) => {
                        const card = getCard(c);
-                       const isMarked = marked.has(c);
+                       const isMarked = marked.has(`${tablaItem.id}-${c}`);
                        // to uniquely identify the interaction, use tablaItem.id + c
                        const uid = `${tablaItem.id}-${c}-${idx}`;
                        return (
                          <button 
                            key={uid} 
                            type="button" 
-                           onPointerDown={(e) => handlePointerDown(e, c)}
-                           onPointerMove={(e) => handlePointerMove(e, c)}
-                           onPointerUp={(e) => handlePointerUp(e, c)}
-                           onPointerCancel={(e) => handlePointerUp(e, c)}
+                           onPointerDown={(e) => handlePointerDown(e, tablaItem.id, c)}
+                           onPointerMove={(e) => handlePointerMove(e, tablaItem.id, c)}
+                           onPointerUp={(e) => handlePointerUp(e, tablaItem.id, c)}
+                           onPointerCancel={(e) => handlePointerUp(e, tablaItem.id, c)}
                            className="relative aspect-[1/1.55] bg-white w-full overflow-hidden active:scale-95 transition-transform touch-none select-none"
                          >
                            <img src={card?.image} alt={card?.name ?? `Carta ${c}`} className="w-full h-full object-fill pointer-events-none" draggable={false} />
@@ -727,7 +943,7 @@ function JugarPage() {
                            )}
 
                            {/* Scratching Ritual Visual */}
-                           {interaction?.cardId === c && interaction.isScratching && (
+                           {interaction?.uid === `${tablaItem.id}-${c}` && interaction.isScratching && (
                              <div 
                                className="absolute z-20 pointer-events-none drop-shadow-2xl flex flex-col items-center justify-center animate-scratch-hand"
                                style={{ left: interaction.curX, top: interaction.curY }}

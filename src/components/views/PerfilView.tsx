@@ -29,7 +29,7 @@ const DEFAULTS: Settings = {
   marker: "ficha",
 };
 
-export function PerfilView() {
+export function PerfilView({ onNavigateTienda }: { onNavigateTienda?: () => void }) {
   const [settings, setSettings] = useState<Settings>(DEFAULTS);
 
   useEffect(() => {
@@ -169,7 +169,14 @@ export function PerfilView() {
             onClick={() => {
               const order: Settings["voice"][] = ["mujer", "hombre", "nino"];
               const idx = order.indexOf(settings.voice);
-              update("voice", order[(idx + 1) % order.length]);
+              const nextVoice = order[(idx + 1) % order.length];
+              
+              const isUnlocked = localStorage.getItem(`garza:unlocked:voice:${nextVoice}`) === "true" || nextVoice === "mujer";
+              if (!isUnlocked) {
+                 if (onNavigateTienda) onNavigateTienda();
+              } else {
+                 update("voice", nextVoice);
+              }
             }}
           />
 
@@ -206,9 +213,15 @@ export function PerfilView() {
                 🐓
               </div>
             }
-            onClick={() =>
-              update("deckStyle", settings.deckStyle === "clasica" ? "moderna" : "clasica")
-            }
+            onClick={() => {
+              const nextStyle = settings.deckStyle === "clasica" ? "moderna" : "clasica";
+              const isUnlocked = localStorage.getItem(`garza:unlocked:deck:${nextStyle}`) === "true" || nextStyle === "clasica";
+              if (!isUnlocked) {
+                 if (onNavigateTienda) onNavigateTienda();
+              } else {
+                 update("deckStyle", nextStyle);
+              }
+            }}
           />
           
           <div className="h-px bg-white/10 w-full my-2" />

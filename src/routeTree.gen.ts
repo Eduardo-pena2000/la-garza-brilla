@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UnirseRouteImport } from './routes/unirse'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as AbrirMesaRouteImport } from './routes/abrir-mesa'
 import { Route as IndexRouteImport } from './routes/index'
@@ -16,6 +17,11 @@ import { Route as MesaIdRouteImport } from './routes/mesa.$id'
 import { Route as MesaIdIndexRouteImport } from './routes/mesa.$id.index'
 import { Route as MesaIdJugarRouteImport } from './routes/mesa.$id.jugar'
 
+const UnirseRoute = UnirseRouteImport.update({
+  id: '/unirse',
+  path: '/unirse',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MenuRoute = MenuRouteImport.update({
   id: '/menu',
   path: '/menu',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/abrir-mesa': typeof AbrirMesaRoute
   '/menu': typeof MenuRoute
+  '/unirse': typeof UnirseRoute
   '/mesa/$id': typeof MesaIdRouteWithChildren
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
   '/mesa/$id/': typeof MesaIdIndexRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/abrir-mesa': typeof AbrirMesaRoute
   '/menu': typeof MenuRoute
+  '/unirse': typeof UnirseRoute
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
   '/mesa/$id': typeof MesaIdIndexRoute
 }
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/abrir-mesa': typeof AbrirMesaRoute
   '/menu': typeof MenuRoute
+  '/unirse': typeof UnirseRoute
   '/mesa/$id': typeof MesaIdRouteWithChildren
   '/mesa/$id/jugar': typeof MesaIdJugarRoute
   '/mesa/$id/': typeof MesaIdIndexRoute
@@ -77,16 +86,19 @@ export interface FileRouteTypes {
     | '/'
     | '/abrir-mesa'
     | '/menu'
+    | '/unirse'
     | '/mesa/$id'
     | '/mesa/$id/jugar'
     | '/mesa/$id/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/abrir-mesa' | '/menu' | '/mesa/$id/jugar' | '/mesa/$id'
+  to:
+    '/' | '/abrir-mesa' | '/menu' | '/unirse' | '/mesa/$id/jugar' | '/mesa/$id'
   id:
     | '__root__'
     | '/'
     | '/abrir-mesa'
     | '/menu'
+    | '/unirse'
     | '/mesa/$id'
     | '/mesa/$id/jugar'
     | '/mesa/$id/'
@@ -96,11 +108,19 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AbrirMesaRoute: typeof AbrirMesaRoute
   MenuRoute: typeof MenuRoute
+  UnirseRoute: typeof UnirseRoute
   MesaIdRoute: typeof MesaIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/unirse': {
+      id: '/unirse'
+      path: '/unirse'
+      fullPath: '/unirse'
+      preLoaderRoute: typeof UnirseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/menu': {
       id: '/menu'
       path: '/menu'
@@ -163,6 +183,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AbrirMesaRoute: AbrirMesaRoute,
   MenuRoute: MenuRoute,
+  UnirseRoute: UnirseRoute,
   MesaIdRoute: MesaIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport

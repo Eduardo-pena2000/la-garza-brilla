@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Plus, LayoutGrid, Trash2, Pencil, Sparkles, CheckCircle, Pointer } from "lucide-react";
 import { DECK, getCard } from "@/lib/deck";
+import { Plus, Trash2, CheckCircle, RefreshCcw, LayoutGrid, X, Pencil, ArrowLeft, Sparkles, Pointer } from "lucide-react";
+import { createPortal } from "react-dom";
 
 type Size = "4x4" | "5x5";
 
@@ -245,7 +246,7 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
   const cols = size === "4x4" ? 4 : 5;
   return (
     <div
-      className="grid gap-[3px] overflow-hidden rounded-xl"
+      className="grid gap-[3px]"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {cards.map((n, i) => (
@@ -258,12 +259,12 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
 function CardTile({ n }: { n: number }) {
   const card = getCard(n);
   return (
-    <div className="relative aspect-[3/4] overflow-hidden rounded-md">
+    <div className="relative aspect-[1/1.55]">
       <img
         src={card?.image}
         alt={card?.name ?? `Carta ${n}`}
         loading="lazy"
-        className="h-full w-full object-cover"
+        className="h-full w-full object-fill drop-shadow-sm"
       />
     </div>
   );
@@ -360,64 +361,111 @@ function TablaSheet({
 }
 
 function CustomTablaModal({ onClose, onSave, initialCards = [] }: { onClose: () => void; onSave: (cards: number[]) => void; initialCards?: number[] }) {
-  const [selected, setSelected] = useState<number[]>(initialCards);
+  // selected array will hold exactly 16 slots, null if empty
+  const [selected, setSelected] = useState<(number | null)[]>(() => {
+    const arr = Array(16).fill(null);
+    initialCards.forEach((c, i) => { if (i < 16) arr[i] = c; });
+    return arr;
+  });
+  
+  // which slot is currently being picked (0-15), or null if viewing board
+  const [activeSlot, setActiveSlot] = useState<number | null>(null);
 
-  const toggleCard = (n: number) => {
-    if (selected.includes(n)) {
-      setSelected(selected.filter(x => x !== n));
-    } else {
-      if (selected.length < 16) {
-        setSelected([...selected, n]);
-      }
+  const filledCount = selected.filter(x => x !== null).length;
+
+  const handleCardPick = (n: number) => {
+    if (activeSlot === null) return;
+    
+    // Check if card is already used somewhere else. If so, remove it from the old slot.
+    const newSelected = [...selected];
+    const existingIndex = newSelected.indexOf(n);
+    if (existingIndex !== -1 && existingIndex !== activeSlot) {
+      newSelected[existingIndex] = null;
     }
+    
+    newSelected[activeSlot] = n;
+    setSelected(newSelected);
+    setActiveSlot(null); // Close deck picker
   };
 
-  return (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-[color:var(--brand-navy-deep)] animate-slide-up-soft">
+  const clearSlot = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation();
+    const newSelected = [...selected];
+    newSelected[index] = null;
+    setSelected(newSelected);
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[color:var(--brand-navy-deep)] animate-slide-up-soft">
       <header className="flex items-center justify-between px-4 py-4 bg-black/20 border-b border-white/10 shrink-0">
         <button onClick={onClose} className="p-2 text-white/70 hover:text-white"><ArrowLeft className="w-6 h-6" /></button>
         <h2 className="text-white font-bold text-lg">Personalizada</h2>
         <button 
-          onClick={() => onSave(selected)}
-          disabled={selected.length !== 16}
+          onClick={() => onSave(selected as number[])}
+          disabled={filledCount !== 16}
           className="px-3 py-1.5 rounded-full text-xs font-bold text-white disabled:opacity-50 disabled:bg-white/10 transition-all shadow-md"
-          style={{ background: selected.length === 16 ? "var(--gradient-brand)" : undefined }}
+          style={{ background: filledCount === 16 ? "var(--gradient-brand)" : undefined }}
         >
-          {selected.length === 16 ? "Guardar" : `${selected.length}/16`}
+          {filledCount === 16 ? "Guardar" : `${filledCount}/16`}
         </button>
       </header>
 
-      <div className="p-4 flex flex-col items-center shrink-0 border-b border-white/5">
-        <p className="text-white/60 text-sm mb-3 font-semibold text-center">Toca las cartas abajo para agregarlas</p>
-        <div className="grid grid-cols-4 gap-1.5 w-full max-w-[280px]">
-          {Array.from({ length: 16 }).map((_, i) => {
-            const cardNum = selected[i];
-            return (
-              <div key={i} onClick={() => cardNum && toggleCard(cardNum)} className="aspect-[3/4] bg-white/10 rounded-lg overflow-hidden border border-white/5 relative">
-                {cardNum && (
-                  <>
-                    <CardTile n={cardNum} />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                      <Trash2 className="text-red-400 w-6 h-6" />
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 pb-32">
-          {DECK.map(c => (
-            <button key={c.n} onClick={() => toggleCard(c.n)} className={`relative aspect-[3/4] rounded-lg overflow-hidden transition-all ${selected.includes(c.n) ? 'ring-2 ring-[color:var(--brand-cyan)] opacity-50 scale-95' : 'ring-1 ring-white/10 hover:ring-white/30'}`}>
-              <CardTile n={c.n} />
-              {selected.includes(c.n) && <div className="absolute inset-0 bg-[color:var(--brand-cyan)]/20 flex items-center justify-center backdrop-blur-[1px]"><CheckCircle className="w-6 h-6 text-white" /></div>}
+      {/* THE BOARD (Main View) */}
+      <div className="flex-1 flex flex-col items-center justify-center p-4">
+        <p className="text-white/80 font-bold mb-6 text-center text-lg">Toca un cuadro vacío para elegir una carta</p>
+        <div className="grid grid-cols-4 gap-1.5 w-full max-w-[400px]">
+          {selected.map((cardNum, i) => (
+            <button 
+              key={i} 
+              onClick={() => setActiveSlot(i)}
+              className={`aspect-[1/1.55] transition-all relative group flex items-center justify-center ${cardNum ? 'bg-white/5 border border-white/10' : 'bg-black/30 border-2 border-dashed border-white/20 hover:border-white/50 active:scale-95'}`}
+            >
+              {cardNum ? (
+                <>
+                  <CardTile n={cardNum} />
+                  <div 
+                    onClick={(e) => clearSlot(e, i)}
+                    className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    <Trash2 className="text-red-400 w-8 h-8" />
+                  </div>
+                </>
+              ) : (
+                <Plus className="text-white/20 w-8 h-8" />
+              )}
             </button>
           ))}
         </div>
       </div>
-    </div>
+
+      {/* FULL SCREEN DECK PICKER MODAL */}
+      {activeSlot !== null && (
+        <div className="fixed inset-0 z-[10000] bg-[color:var(--brand-navy-deep)] flex flex-col animate-slide-up-soft">
+          <header className="flex items-center justify-between px-4 py-4 bg-black/30 border-b border-white/10 shrink-0">
+            <button onClick={() => setActiveSlot(null)} className="p-2 text-white/70 hover:text-white"><X className="w-6 h-6" /></button>
+            <h3 className="text-white font-bold">Elige una carta</h3>
+            <div className="w-10"></div>
+          </header>
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 pb-32 max-w-5xl mx-auto">
+              {DECK.map(c => {
+                const isUsed = selected.includes(c.n);
+                return (
+                  <button 
+                    key={c.n} 
+                    onClick={() => handleCardPick(c.n)} 
+                    className={`relative aspect-[1/1.55] transition-all active:scale-95 ${isUsed ? 'opacity-30 grayscale' : 'hover:ring-2 hover:ring-white/50'}`}
+                  >
+                    <CardTile n={c.n} />
+                    {isUsed && <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-[1px]"><CheckCircle className="w-8 h-8 text-white/50" /></div>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body
   );
 }
