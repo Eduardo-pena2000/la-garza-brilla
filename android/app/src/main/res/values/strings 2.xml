@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Lotería La Garza</string>
-    <string name="title_activity_main">Lotería La Garza</string>
-    <string name="package_name">com.lagarza.app</string>
-    <string name="custom_url_scheme">com.lagarza.app</string>
-</resources>
