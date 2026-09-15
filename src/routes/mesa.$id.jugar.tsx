@@ -26,7 +26,7 @@ interface Tabla {
 interface Mesa {
   id: string; name: string; mode: Mode; size: Size; perPlayer: number; cost?: number;
   tablaIds: string[]; host: string; status: string; deck?: number[];
-  drawnIdx?: number; players?: Record<string, any>; prizePool?: number;
+  drawnIdx?: number; players?: Record<string, any>; prizePool?: number; serverPaused?: boolean;
 }
 interface ChatMsg {
   id: string; text: string; sender: string; timestamp: number;
@@ -410,6 +410,20 @@ function JugarPage() {
       </BrandBackground>
     );
   }
+
+  useEffect(() => {
+    if (!isHost || !mesa || mesa.status !== "en-juego" || paused || won || mesa.serverPaused) return;
+    
+    const interval = setInterval(() => {
+      if (drawnIdx < deck.length - 1) {
+        update(ref(database, `mesas/${id}`), { drawnIdx: drawnIdx + 1 }).catch(() => {});
+      } else {
+        setPaused(true);
+      }
+    }, speedFor(mesa.mode));
+    
+    return () => clearInterval(interval);
+  }, [isHost, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, deck.length, id]);
 
   const timeSecs = speedFor(mesa.mode) / 1000;
   const connectedPlayers = mesa.players ? Object.keys(mesa.players) : [mesa.host];
@@ -1005,9 +1019,15 @@ function JugarPage() {
           )}
 
           <button 
-            disabled={true}
+            onClick={() => {
+              if (isHost && drawnIdx < 0) {
+                 update(ref(database, `mesas/${id}`), { status: "en-juego", drawnIdx: 0, serverPaused: false }).catch(() => {});
+                 setPaused(false);
+              }
+            }}
+            disabled={!isHost || drawnIdx >= 0}
             className={`flex-1 text-[color:var(--brand-navy-deep)] font-extrabold py-3 rounded-full shadow-md text-sm sm:text-base tracking-wide transition-transform ${
-              !isHost ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-white/20 text-white/50 cursor-not-allowed"
+              !isHost || drawnIdx >= 0 ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-[color:var(--brand-gold)] shadow-[0_0_15px_rgba(255,215,0,0.4)] active:scale-95"
             }`}
           >
             {isHost ? (drawnIdx < 0 ? "INICIAR" : "Corre y se va corriendo") : "Esperando al anfitrión"}
