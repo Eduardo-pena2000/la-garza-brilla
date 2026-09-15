@@ -387,6 +387,20 @@ function JugarPage() {
     setActiveModal(null);
   }
 
+  useEffect(() => {
+    if (!isHost || !mesa || mesa.status !== "en-juego" || paused || won || mesa.serverPaused) return;
+    
+    const interval = setInterval(() => {
+      if (drawnIdx < deck.length - 1) {
+        update(ref(database, `mesas/${id}`), { drawnIdx: drawnIdx + 1 }).catch(() => {});
+      } else {
+        setPaused(true);
+      }
+    }, speedFor(mesa.mode));
+    
+    return () => clearInterval(interval);
+  }, [isHost, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, deck.length, id]);
+
   if (loading) return <BrandBackground><div className="grid min-h-[100dvh] place-items-center text-white">Cargando...</div></BrandBackground>;
   
   if (!mesa || tablasActivas.length === 0) {
@@ -410,20 +424,6 @@ function JugarPage() {
       </BrandBackground>
     );
   }
-
-  useEffect(() => {
-    if (!isHost || !mesa || mesa.status !== "en-juego" || paused || won || mesa.serverPaused) return;
-    
-    const interval = setInterval(() => {
-      if (drawnIdx < deck.length - 1) {
-        update(ref(database, `mesas/${id}`), { drawnIdx: drawnIdx + 1 }).catch(() => {});
-      } else {
-        setPaused(true);
-      }
-    }, speedFor(mesa.mode));
-    
-    return () => clearInterval(interval);
-  }, [isHost, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, deck.length, id]);
 
   const timeSecs = speedFor(mesa.mode) / 1000;
   const connectedPlayers = mesa.players ? Object.keys(mesa.players) : [mesa.host];
@@ -924,19 +924,23 @@ function JugarPage() {
           </div>
         </div>
 
-        {/* ABSOLUTE DECK CARD */}
-        <div className="absolute right-2 top-[180px] z-20 w-[64px] h-[96px] bg-white/10 p-1 shadow-2xl border border-white/20 transform rotate-2 backdrop-blur-md">
-          <div className="w-full h-full relative">
-            {drawn ? (
-              <img src={drawn.image} alt={drawn.name} className="w-full h-full object-fill animate-pop-in" />
-            ) : (
-              <div className="w-full h-full bg-red-600 border border-red-800 flex flex-col items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]"></div>
-            )}
-          </div>
-        </div>
         {/* MAIN GAME BOARD */}
-        <main className="flex-1 relative p-4 pt-8 pb-32 flex justify-center items-center overflow-y-auto z-10 w-full">
+        <main className="flex-1 relative p-4 pt-4 pb-32 flex justify-center items-start overflow-y-auto z-10 w-full">
            <div className="w-full h-full flex flex-col items-center">
+             
+             {/* DECK CARD (Now inline, no longer overlaps) */}
+             <div className="mb-6 flex flex-col items-center">
+               <span className="text-[10px] text-white/50 font-bold uppercase tracking-widest mb-2">Carta actual</span>
+               <div className="w-[80px] h-[120px] bg-white/10 p-1 shadow-2xl border border-[color:var(--brand-gold)] transform rotate-2 backdrop-blur-md rounded-lg relative">
+                 <div className="w-full h-full relative">
+                   {drawn ? (
+                     <img src={drawn.image} alt={drawn.name} className="w-full h-full object-fill animate-pop-in rounded-sm" />
+                   ) : (
+                     <div className="w-full h-full bg-red-600 border border-red-800 flex flex-col items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')] rounded-sm"></div>
+                   )}
+                 </div>
+               </div>
+             </div>
              <div className={`grid gap-2 w-full max-w-[800px] h-fit place-items-center mx-auto ${
                tablasActivas.length === 1 ? 'grid-cols-1 max-w-[360px]' :
                'grid-cols-2'
