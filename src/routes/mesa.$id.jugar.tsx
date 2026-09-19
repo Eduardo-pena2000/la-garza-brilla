@@ -238,8 +238,10 @@ function JugarPage() {
   useEffect(() => {
     if (drawnIdx === 0) {
       setShowTutorial(true);
-      const timer = setTimeout(() => setShowTutorial(false), 4000);
+      const timer = setTimeout(() => setShowTutorial(false), 3000);
       return () => clearTimeout(timer);
+    } else {
+      setShowTutorial(false);
     }
   }, [drawnIdx]);
 
