@@ -243,6 +243,16 @@ function JugarPage() {
     }
   }, [drawnIdx, mesa?.status]);
 
+  // Transition from tutorial to first card
+  useEffect(() => {
+    if (isHost && drawnIdx === -1 && mesa?.status === "en-juego") {
+      const timer = setTimeout(() => {
+        update(ref(database, `mesas/${id}`), { drawnIdx: 0 }).catch(() => {});
+      }, speedFor(mesa.mode));
+      return () => clearTimeout(timer);
+    }
+  }, [isHost, drawnIdx, mesa?.status, mesa?.mode, id]);
+
   const currentCard = deck[drawnIdx];
   useEffect(() => {
     if (currentCard !== undefined && settings.audio) {
@@ -388,10 +398,11 @@ function JugarPage() {
   }
 
   useEffect(() => {
-    if (!isHost || !mesa || mesa.status !== "en-juego" || paused || won || mesa.serverPaused) return;
+    if (!isHost || !mesa || mesa.status !== "en-juego" || paused || won || mesa.serverPaused || drawnIdx < 0) return;
+    if (!mesa.deck || mesa.deck.length === 0) return;
     
     const interval = setInterval(() => {
-      if (drawnIdx < deck.length - 1) {
+      if (drawnIdx < mesa.deck.length - 1) {
         update(ref(database, `mesas/${id}`), { drawnIdx: drawnIdx + 1 }).catch(() => {});
       } else {
         setPaused(true);
@@ -399,7 +410,7 @@ function JugarPage() {
     }, speedFor(mesa.mode));
     
     return () => clearInterval(interval);
-  }, [isHost, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, deck.length, id]);
+  }, [isHost, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, mesa?.deck?.length, id]);
 
   if (loading) return <BrandBackground><div className="grid min-h-[100dvh] place-items-center text-white">Cargando...</div></BrandBackground>;
   
