@@ -52,7 +52,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function speedFor(mode: Mode): number {
-  return 3000;
+  return 4000;
 }
 
 const MODE_META: Record<Mode, { label: string; hint: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -236,14 +236,12 @@ function JugarPage() {
 
   const [showTutorial, setShowTutorial] = useState(false);
   useEffect(() => {
-    if (drawnIdx === 0) {
+    if (drawnIdx === -1 && mesa?.status === "en-juego") {
       setShowTutorial(true);
-      const timer = setTimeout(() => setShowTutorial(false), 3000);
-      return () => clearTimeout(timer);
     } else {
       setShowTutorial(false);
     }
-  }, [drawnIdx]);
+  }, [drawnIdx, mesa?.status]);
 
   const currentCard = deck[drawnIdx];
   useEffect(() => {
@@ -545,9 +543,6 @@ function JugarPage() {
                       Comenzar Partida
                     </button>
                   )}
-                  <button onClick={restart} className="w-full bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-full text-lg shadow-lg active:scale-95">
-                    Nueva partida
-                  </button>
                 </>
               )}
               
@@ -1027,16 +1022,16 @@ function JugarPage() {
           <button 
             onClick={() => {
               if (isHost && drawnIdx < 0) {
-                 update(ref(database, `mesas/${id}`), { status: "en-juego", drawnIdx: 0, serverPaused: false }).catch(() => {});
+                 update(ref(database, `mesas/${id}`), { status: "en-juego", serverPaused: false }).catch(() => {});
                  setPaused(false);
               }
             }}
-            disabled={!isHost || drawnIdx >= 0}
+            disabled={!isHost || mesa?.status === "en-juego"}
             className={`flex-1 text-[color:var(--brand-navy-deep)] font-extrabold py-3 rounded-full shadow-md text-sm sm:text-base tracking-wide transition-transform ${
-              !isHost || drawnIdx >= 0 ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-[color:var(--brand-gold)] shadow-[0_0_15px_rgba(255,215,0,0.4)] active:scale-95"
+              !isHost || mesa?.status === "en-juego" ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-[color:var(--brand-gold)] shadow-[0_0_15px_rgba(255,215,0,0.4)] active:scale-95"
             }`}
           >
-            {isHost ? (drawnIdx < 0 ? "INICIAR" : "Corre y se va corriendo") : "Esperando al anfitrión"}
+            {isHost ? (mesa?.status !== "en-juego" ? "INICIAR" : "Corre y se va corriendo") : "Esperando al anfitrión"}
           </button>
         </div>
 
