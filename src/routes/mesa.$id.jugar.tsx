@@ -402,7 +402,7 @@ function JugarPage() {
     if (!mesa.deck || mesa.deck.length === 0) return;
     
     const interval = setInterval(() => {
-      if (drawnIdx < mesa.deck.length - 1) {
+      if (drawnIdx < (mesa.deck?.length || 0) - 1) {
         update(ref(database, `mesas/${id}`), { drawnIdx: drawnIdx + 1 }).catch(() => {});
       } else {
         setPaused(true);
