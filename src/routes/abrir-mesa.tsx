@@ -24,6 +24,7 @@ import { BrandBackground } from "@/components/BrandBackground";
 import { PapelPicado } from "@/components/Fiesta";
 import { MiniBoardIllustration } from "@/components/MiniBoardIllustration";
 import { getCard } from "@/lib/deck";
+import { getThemedCard } from "@/lib/deckSkins";
 import { ref, push, set } from "firebase/database";
 import { database } from "@/lib/firebase";
 
@@ -756,13 +757,18 @@ function MiniGrid({ cards, size }: { cards: number[]; size: Size }) {
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {cards.map((n, i) => {
-        const card = getCard(n);
+        const card = getThemedCard(n);
         return (
           <div key={i} className="relative aspect-[3/4]">
             <img
               src={card?.image}
               alt={card?.name ?? `Carta ${n}`}
-              loading="lazy"
+              decoding="async"
+              onError={(e) => {
+                if (card?.fallbackImage && e.currentTarget.src !== card.fallbackImage) {
+                  e.currentTarget.src = card.fallbackImage;
+                }
+              }}
               className="h-full w-full object-cover"
             />
           </div>

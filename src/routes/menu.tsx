@@ -33,11 +33,12 @@ function MainTabsLayout() {
   };
 
   const scrollToTab = (index: number) => {
+    setActiveTab(index);
     if (!containerRef.current) return;
     const width = containerRef.current.clientWidth;
     containerRef.current.scrollTo({
       left: width * index,
-      behavior: "smooth"
+      behavior: "auto"
     });
   };
 
@@ -58,11 +59,11 @@ function MainTabsLayout() {
       <div 
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex w-full h-[100dvh] overflow-x-auto snap-x snap-mandatory relative z-10 scrollbar-hide"
+        className="flex w-full h-[100dvh] overflow-x-auto snap-x snap-mandatory relative z-10 scrollbar-hide scroll-touch-x"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {/* Section 0: Inicio */}
-        <div className="w-screen h-full shrink-0 snap-center">
+        <div className="w-screen h-full shrink-0 snap-center overflow-hidden">
           <InicioView 
             onNavigateTienda={() => scrollToTab(3)}
             onNavigateTablas={() => scrollToTab(2)}
@@ -72,12 +73,12 @@ function MainTabsLayout() {
         </div>
 
         {/* Section 1: Jugar */}
-        <div className="w-screen h-full shrink-0 snap-center">
+        <div className="w-screen h-full shrink-0 snap-center overflow-hidden">
           <JugarView />
         </div>
 
         {/* Section 2: Barajas */}
-        <div className="w-screen h-full shrink-0 snap-center">
+        <div className="w-screen h-full shrink-0 snap-center overflow-hidden">
           <TablasView 
             onBack={() => scrollToTab(0)}
             navigateToMenu={() => scrollToTab(0)}
@@ -85,14 +86,14 @@ function MainTabsLayout() {
         </div>
 
         {/* Section 3: Tienda */}
-        <div className="w-screen h-full shrink-0 snap-center">
+        <div className="w-screen h-full shrink-0 snap-center overflow-hidden">
           <TiendaView 
             onBack={() => scrollToTab(0)}
           />
         </div>
 
         {/* Section 4: Perfil */}
-        <div className="w-screen h-full shrink-0 snap-center">
+        <div className="w-screen h-full shrink-0 snap-center overflow-hidden">
           <PerfilView onNavigateTienda={() => scrollToTab(3)} />
         </div>
       </div>

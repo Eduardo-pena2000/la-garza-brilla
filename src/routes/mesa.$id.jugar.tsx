@@ -1,17 +1,22 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   ArrowLeft, Pause, Play, Settings2, MessageCircle, Users, RotateCcw,
   Timer as TimerIcon, Heart, Image as ImageIcon, Triangle, X, Send,
-  Menu, Info, Trophy, Link as LinkIcon, Edit2, Share2, LayoutGrid, Check, CircleDot, Zap
+  Menu, Info, Trophy, Link as LinkIcon, Edit2, Share2, LayoutGrid, Check, CircleDot, Zap, Crown, ShieldCheck,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import { DECK, getCard } from "@/lib/deck";
-import { ref, onValue, update, push, set, onDisconnect } from "firebase/database";
+import { ref, onValue, update, push, set, onDisconnect, remove } from "firebase/database";
 import { database } from "@/lib/firebase";
 import { BrandBackground } from "@/components/BrandBackground";
 import { CoinAnimation } from "@/components/CoinAnimation";
 import { MiniBoardIllustration } from "@/components/MiniBoardIllustration";
 import { increment } from "firebase/database";
+import { AdInterstitialModal } from "@/components/AdInterstitialModal";
+import { getEquippedMarker, getOwnedItemIds } from "@/lib/loot";
+import { SPECIAL_STICKERS, SPECIAL_EMOJIS } from "@/lib/chests";
+import { getEquippedDeckSkin, getThemedCard, type ThemedCard } from "@/lib/deckSkins";
 
 export const Route = createFileRoute("/mesa/$id/jugar")({
   component: JugarPage,
@@ -23,10 +28,31 @@ type Mode = "normal" | "pozo" | "esquinas" | "sieteLoco" | "modoX";
 interface Tabla {
   id: string; size: Size; cards: number[]; createdAt: number;
 }
+export interface MesaWinner {
+  name: string;
+  isBot?: boolean;
+  prize: number;
+  reason?: "loteria" | "random_finish";
+  timestamp: number;
+}
+export interface PlayerGameSession {
+  name: string;
+  role: "host" | "guest";
+  status?: "active" | "disconnected";
+  botActive?: boolean;
+  disconnectedAt?: number;
+  tablas?: Tabla[];
+  marked?: string[];
+  lastActive?: number;
+}
 interface Mesa {
   id: string; name: string; mode: Mode; size: Size; perPlayer: number; cost?: number;
   tablaIds: string[]; host: string; status: string; deck?: number[];
-  drawnIdx?: number; players?: Record<string, any>; prizePool?: number; serverPaused?: boolean;
+  drawnIdx?: number; players?: Record<string, PlayerGameSession>; prizePool?: number; serverPaused?: boolean;
+  winner?: MesaWinner;
+  nextRoundAt?: number;
+  isVip?: boolean; isScheduled?: boolean; scheduledDate?: string; scheduledTime?: string;
+  rounds?: any[]; currentRound?: number;
 }
 interface ChatMsg {
   id: string; text: string; sender: string; timestamp: number;
@@ -40,6 +66,16 @@ function loadTablas(): Tabla[] {
     if (!raw) return [];
     return JSON.parse(raw) as Tabla[];
   } catch { return []; }
+}
+
+function randomCards(size: Size): number[] {
+  const total = size === "4x4" ? 16 : 25;
+  const pool = Array.from({ length: 54 }, (_, i) => i + 1);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, total);
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -129,11 +165,54 @@ function JugarPage() {
   }, [coins]);
 
   const [marked, setMarked] = useState<Set<string>>(new Set());
-  const [paused, setPaused] = useState(true);
-  
-  const [settings, setSettings] = useState({
-    audio: true, effects: true, confetti: true, vibration: true, marker: "/markers/ifrijol.png", voice: "default"
+  const [paused, setPaused] = useState(true);  const [settings, setSettings] = useState(() => {
+    try {
+      const eq = getEquippedMarker();
+      return {
+        audio: true,
+        effects: true,
+        confetti: true,
+        vibration: true,
+        marker: eq?.image || eq?.emoji || "/markers/ifrijol.png",
+        voice: "default",
+      };
+    } catch {
+      return {
+        audio: true,
+        effects: true,
+        confetti: true,
+        vibration: true,
+        marker: "/markers/ifrijol.png",
+        voice: "default",
+      };
+    }
   });
+
+  useEffect(() => {
+    const applyMarker = () => {
+      try {
+        const marker = getEquippedMarker();
+        if (marker.image) {
+          setSettings((prev) => ({ ...prev, marker: marker.image! }));
+        } else if (marker.emoji) {
+          setSettings((prev) => ({ ...prev, marker: marker.emoji }));
+        }
+      } catch {}
+    };
+    applyMarker();
+    window.addEventListener("garza:marker-updated", applyMarker);
+    return () => window.removeEventListener("garza:marker-updated", applyMarker);
+  }, []);
+
+  const [deckSkin, setDeckSkin] = useState(() => getEquippedDeckSkin());
+
+  useEffect(() => {
+    const handleDeckUpdate = () => {
+      setDeckSkin(getEquippedDeckSkin());
+    };
+    window.addEventListener("garza:deck-updated", handleDeckUpdate);
+    return () => window.removeEventListener("garza:deck-updated", handleDeckUpdate);
+  }, []);
 
   const VOICES = [
     { id: "default", name: "Clásica", icon: "\uD83D\uDC69\u200D\uD83C\uDFA4" },
@@ -150,7 +229,7 @@ function JugarPage() {
   const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([]);
   const [floatingMsg, setFloatingMsg] = useState<{ text: string; sender: string; isSticker: boolean } | null>(null);
   const [chatInput, setChatInput] = useState("");
-  const [stickerTab, setStickerTab] = useState<"clasicos"|"gifs"|"cartas">("clasicos");
+  const [stickerTab, setStickerTab] = useState<"botin" | "clasicos" | "gifs" | "cartas">("botin");
   
   // Scratch Interaction
   const [interaction, setInteraction] = useState<{
@@ -164,9 +243,70 @@ function JugarPage() {
 
   // Modals state
   const [activeModal, setActiveModal] = useState<"chat"|"players"|"settings"|"tablas"|"modos"|"stickers"|"menu"|"exitConfirm"|null>(null);
+  const [showAd, setShowAd] = useState(false);
+  const [pendingActionAfterAd, setPendingActionAfterAd] = useState<(() => void) | null>(null);
+
+  const TABLAS_PER_PAGE = 4;
+  const [activePageIndex, setActivePageIndex] = useState(0);
+  const boardsSliderRef = useRef<HTMLDivElement>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
 
   const userName = typeof window !== "undefined" ? localStorage.getItem("garza:name") || "Jugador" : "Jugador";
   const isHost = (typeof window !== "undefined" && localStorage.getItem(`garza:host:${id}`) === "true") || mesa?.host === userName;
+
+  // Chunk active boards into pages of 4 (e.g. 8 tablas -> Page 1: 4, Page 2: 4)
+  const pages = useMemo(() => {
+    if (tablasActivas.length === 0) return [];
+    if (tablasActivas.length <= TABLAS_PER_PAGE) return [tablasActivas];
+    const chunks: Tabla[][] = [];
+    for (let i = 0; i < tablasActivas.length; i += TABLAS_PER_PAGE) {
+      chunks.push(tablasActivas.slice(i, i + TABLAS_PER_PAGE));
+    }
+    return chunks;
+  }, [tablasActivas]);
+
+  const handleBoardsScroll = () => {
+    if (!boardsSliderRef.current) return;
+    const { scrollLeft, clientWidth } = boardsSliderRef.current;
+    if (clientWidth > 0) {
+      const idx = Math.round(scrollLeft / clientWidth);
+      if (idx !== activePageIndex && idx >= 0 && idx < pages.length) {
+        setActivePageIndex(idx);
+      }
+    }
+  };
+
+  const scrollToPage = (idx: number) => {
+    if (!boardsSliderRef.current) return;
+    const width = boardsSliderRef.current.clientWidth;
+    boardsSliderRef.current.scrollTo({
+      left: width * idx,
+      behavior: "smooth"
+    });
+    setActivePageIndex(idx);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+    
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0 && activePageIndex < pages.length - 1) {
+        scrollToPage(activePageIndex + 1);
+      } else if (deltaX > 0 && activePageIndex > 0) {
+        scrollToPage(activePageIndex - 1);
+      }
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  };
 
   useEffect(() => {
     const mesaRef = ref(database, `mesas/${id}`);
@@ -182,16 +322,38 @@ function JugarPage() {
         // Initialize boards if not loaded yet
         setTablasActivas(prev => {
           if (prev.length > 0) return prev;
-          const allTablas = loadTablas().filter(t => t.size === data.size);
+          const remoteTablas = data.players?.[userName]?.tablas;
+          if (remoteTablas && Array.isArray(remoteTablas) && remoteTablas.length > 0) {
+            return remoteTablas;
+          }
+          let allTablas = loadTablas().filter(t => t.size === data.size);
+          const count = data.perPlayer || 2;
+          if (allTablas.length < count) {
+            const need = count - allTablas.length;
+            const generated: Tabla[] = [];
+            for (let i = 0; i < need; i++) {
+              generated.push({
+                id: Math.random().toString(36).substring(2, 9),
+                size: data.size,
+                cards: randomCards(data.size),
+                createdAt: Date.now() + i,
+              });
+            }
+            try {
+              const fullStored = loadTablas();
+              localStorage.setItem("garza:tablas", JSON.stringify([...fullStored, ...generated]));
+            } catch {}
+            allTablas = [...allTablas, ...generated];
+          }
           try {
             const savedSelected = localStorage.getItem(`garza:selectedTablas:${id}`);
             if (savedSelected) {
               const ids = JSON.parse(savedSelected) as string[];
               const selected = ids.map(tid => allTablas.find(t => t.id === tid)).filter(Boolean) as Tabla[];
-              if (selected.length > 0) return selected;
+              if (selected.length >= 1 && selected.length <= count) return selected;
             }
           } catch {}
-          return allTablas.slice(0, data.perPlayer || 1);
+          return allTablas.slice(0, Math.min(2, count));
         });
 
       } else {
@@ -216,23 +378,90 @@ function JugarPage() {
       }
     });
 
-    const playerRef = ref(database, `mesas/${id}/players/${userName}`);
-    update(playerRef, {
-      name: userName,
-      role: isHost ? "host" : "guest",
-    }).catch(() => {});
-    
-    const discRef = onDisconnect(playerRef);
-    discRef.remove();
-
     return () => {
-      unsubscribe(); unsubscribeChat(); discRef.cancel();
+      unsubscribe();
+      unsubscribeChat();
     };
   }, [id, isHost, userName]);
+
+  // Keep-alive presence & bot registration: si el jugador se desconecta, el bot toma el control
+  useEffect(() => {
+    if (!id || !userName || tablasActivas.length === 0) return;
+
+    const playerRef = ref(database, `mesas/${id}/players/${userName}`);
+
+    // Si el bot marcó cartas mientras el usuario estaba fuera, restaurarlas localmente:
+    const remoteMarks = mesa?.players?.[userName]?.marked;
+    if (remoteMarks && Array.isArray(remoteMarks) && remoteMarks.length > 0) {
+      setMarked((prev) => {
+        const next = new Set(prev);
+        remoteMarks.forEach((m) => next.add(m));
+        return next;
+      });
+    }
+
+    update(playerRef, {
+      name: userName,
+      role: isSpectator ? "spectator" : (isHost ? "host" : "guest"),
+      status: isSpectator ? "spectator" : "active",
+      botActive: false,
+      tablas: tablasActivas.map((t) => ({ id: t.id, size: t.size, cards: t.cards, createdAt: t.createdAt })),
+      lastActive: Date.now(),
+    }).catch(() => {});
+
+    // IMPORTANTE: Al desconectarse, NO eliminar al jugador. Marcarlo como desconectado para que el bot juegue por él.
+    const discRef = onDisconnect(playerRef);
+    discRef.update({
+      status: "disconnected",
+      botActive: true,
+      disconnectedAt: Date.now(),
+    });
+
+    return () => {
+      discRef.cancel();
+    };
+  }, [id, userName, isHost, tablasActivas, isSpectator]);
 
   const deck = mesa?.deck || [];
   const drawnIdx = mesa?.drawnIdx ?? -1;
   const isGameStarted = drawnIdx >= 0;
+
+  // Determinar si entra como espectador:
+  // Si la partida ya está en juego (drawnIdx >= 0), y el usuario no estaba registrado previamente como jugador activo
+  const isSpectator = useMemo(() => {
+    if (!mesa) return false;
+    if (mesa.players?.[userName]?.role === "spectator" || mesa.players?.[userName]?.status === "spectator") {
+      return true;
+    }
+    const hadSession = Boolean(mesa.players?.[userName] && mesa.players[userName].status !== "spectator");
+    if (!hadSession && mesa.status === "en-juego" && drawnIdx >= 0 && !isHost) {
+      return true;
+    }
+    return false;
+  }, [mesa, userName, drawnIdx, isHost]);
+
+  // Elección del active caller (Host Failover):
+  // Si el host se desconecta, el primer invitado conectado toma el control de avanzar las cartas
+  const activeCallerName = useMemo(() => {
+    if (!mesa?.players) return isHost ? userName : null;
+    const playersArr = Object.values(mesa.players);
+    if (playersArr.length === 0) return isHost ? userName : null;
+
+    const activePlayers = playersArr.filter((p) => p.status !== "disconnected");
+    if (activePlayers.length > 0) {
+      const activeHost = activePlayers.find((p) => p.role === "host" || p.name === mesa.host);
+      if (activeHost) return activeHost.name;
+      // Host desconectado: el primer invitado activo toma el relevo automáticamente
+      activePlayers.sort((a, b) => a.name.localeCompare(b.name));
+      return activePlayers[0].name;
+    }
+
+    // Fallback si todos están desconectados
+    const hostFallback = playersArr.find((p) => p.role === "host" || p.name === mesa.host);
+    return hostFallback ? hostFallback.name : playersArr[0].name;
+  }, [mesa?.players, mesa?.host, isHost, userName]);
+
+  const isCaller = userName === activeCallerName;
 
   const [showTutorial, setShowTutorial] = useState(false);
   useEffect(() => {
@@ -245,13 +474,13 @@ function JugarPage() {
 
   // Transition from tutorial to first card
   useEffect(() => {
-    if (isHost && drawnIdx === -1 && mesa?.status === "en-juego") {
+    if (isCaller && drawnIdx === -1 && mesa?.status === "en-juego" && !mesa?.serverPaused && !mesa?.winner) {
       const timer = setTimeout(() => {
         update(ref(database, `mesas/${id}`), { drawnIdx: 0 }).catch(() => {});
       }, speedFor(mesa.mode));
       return () => clearTimeout(timer);
     }
-  }, [isHost, drawnIdx, mesa?.status, mesa?.mode, id]);
+  }, [isCaller, drawnIdx, mesa?.status, mesa?.serverPaused, mesa?.mode, mesa?.winner, id]);
 
   const currentCard = deck[drawnIdx];
   useEffect(() => {
@@ -262,7 +491,7 @@ function JugarPage() {
     }
   }, [currentCard, settings.audio, settings.voice]);
 
-  const drawn = drawnIdx >= 0 ? getCard(deck[drawnIdx]) : null;
+  const drawn = drawnIdx >= 0 ? getThemedCard(deck[drawnIdx], deckSkin.id) : null;
 
   useEffect(() => {
     if (drawnIdx === -1) {
@@ -274,36 +503,46 @@ function JugarPage() {
   }, [drawnIdx]);
 
   useEffect(() => {
-    if (drawnIdx === 0 && !roundPaid && tablasActivas.length > 0 && mesa) {
+    if (drawnIdx === 0 && !roundPaid && tablasActivas.length > 0 && mesa && !isSpectator) {
       const myCost = tablasActivas.length * (mesa.cost || 10);
       setCoins(prev => prev - myCost);
       setRoundPaid(true);
       update(ref(database, `mesas/${id}`), { prizePool: increment(myCost) }).catch(() => {});
     }
-  }, [drawnIdx, roundPaid, tablasActivas.length, mesa?.cost, id]);
+  }, [drawnIdx, roundPaid, tablasActivas.length, mesa?.cost, id, isSpectator]);
 
   useEffect(() => {
-    if (!mesa || tablasActivas.length === 0 || winDismissed || won) return;
+    if (!mesa || tablasActivas.length === 0 || winDismissed || won || mesa.winner || isSpectator) return;
     const hasWin = tablasActivas.some(t => checkWin(mesa.mode, t.size, t.cards, (c) => marked.has(`${t.id}-${c}`)));
     if (hasWin) {
       setWon(true);
-      
-      // Award prize
-      if (mesa.prizePool && mesa.prizePool > 0) {
-         setCoins(prev => prev + mesa.prizePool!);
-         update(ref(database, `mesas/${id}`), { prizePool: 0, serverPaused: true }).catch(() => {});
-      } else {
-         update(ref(database, `mesas/${id}`), { serverPaused: true }).catch(() => {});
+      const prize = mesa.prizePool || 0;
+      update(ref(database, `mesas/${id}`), {
+        winner: {
+          name: userName,
+          isBot: false,
+          prize,
+          reason: "loteria",
+          timestamp: Date.now(),
+        },
+        nextRoundAt: Date.now() + 60000,
+        prizePool: 0,
+        serverPaused: true,
+        status: "terminada",
+      }).catch(() => {});
+
+      if (prize > 0) {
+        setCoins(prev => prev + prize);
       }
 
       if (isHost) setPaused(true);
       if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
       if (settings.vibration && navigator.vibrate) navigator.vibrate([500, 200, 500]);
     }
-  }, [marked, mesa, tablasActivas, settings, winDismissed, won, isHost]);
+  }, [marked, mesa, tablasActivas, settings, winDismissed, won, isHost, userName, id, isSpectator]);
 
   function toggleMark(tablaId: string, card: number) {
-    if (won) return;
+    if (won || mesa?.winner || isSpectator) return;
     const currentDrawnCard = deck[drawnIdx];
     if (currentDrawnCard !== card) return; // Sólo marcar si es la carta actual
 
@@ -313,6 +552,12 @@ function JugarPage() {
 
       const next = new Set(prev);
       next.add(markKey);
+
+      // Sincronizar marcas en Firebase para que si se desconecta, el bot conozca el progreso
+      update(ref(database, `mesas/${id}/players/${userName}`), {
+        marked: Array.from(next),
+      }).catch(() => {});
+
       if (settings.effects) new Audio("/audio/effects/pop.mp3").play().catch(() => {});
       if (settings.vibration && navigator.vibrate) navigator.vibrate(50);
       return next;
@@ -321,7 +566,11 @@ function JugarPage() {
 
   // --- SCRATCH INTERACTION HANDLERS ---
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>, tablaId: string, c: number) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    if (e.pointerType === "mouse") {
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -349,7 +598,9 @@ function JugarPage() {
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>, tablaId: string, c: number) => {
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
     if (interaction && interaction.uid === `${tablaId}-${c}`) {
       if (!interaction.isScratching) {
         toggleMark(tablaId, c);
@@ -360,15 +611,75 @@ function JugarPage() {
   // ------------------------------------
 
 
-  async function restart() {
-    if (!isHost || !mesa) return;
+  async function doRestart() {
+    if (!mesa) return;
+    if (!isHost && !isCaller) return;
+
+    // Si algún jugador se desconectó y nunca regresó durante la ronda, se desconecta de la sala
+    if (mesa.players) {
+      let activeCount = 0;
+      for (const [pName, pData] of Object.entries<any>(mesa.players)) {
+        if (pData.status === "disconnected") {
+          remove(ref(database, `mesas/${id}/players/${pName}`)).catch(() => {});
+        } else {
+          activeCount++;
+          if (pData.role === "spectator" || pData.status === "spectator") {
+            // Los espectadores pasan a ser jugadores activos para la nueva ronda
+            update(ref(database, `mesas/${id}/players/${pName}`), {
+              role: "guest",
+              status: "active",
+              marked: [],
+            }).catch(() => {});
+          } else {
+            update(ref(database, `mesas/${id}/players/${pName}`), { marked: [] }).catch(() => {});
+          }
+        }
+      }
+
+      if (activeCount === 0) {
+        remove(ref(database, `mesas/${id}`)).catch(() => {});
+        return;
+      }
+    }
+
+    // Avanzar de ronda si es torneo/sala VIP con varias rondas
+    let nextRound = mesa.currentRound || 1;
+    let nextMode = mesa.mode;
+    if (mesa.rounds && Array.isArray(mesa.rounds)) {
+      if (nextRound < mesa.rounds.length) {
+        nextRound += 1;
+        nextMode = mesa.rounds[nextRound - 1]?.mode || mesa.mode;
+      }
+    }
+
     const newDeck = shuffle(DECK.map((c) => c.n));
-    await update(ref(database, `mesas/${id}`), { deck: newDeck, drawnIdx: -1, status: "abierta", serverPaused: false });
+    await update(ref(database, `mesas/${id}`), {
+      deck: newDeck,
+      drawnIdx: -1,
+      status: "en-juego",
+      serverPaused: false,
+      winner: null,
+      nextRoundAt: null,
+      currentRound: nextRound,
+      mode: nextMode,
+    });
     setMarked(new Set());
     setWon(false);
     setWinDismissed(false);
-    setPaused(true);
+    setPaused(false);
     setActiveModal(null);
+  }
+
+  async function restart() {
+    if (!mesa) return;
+    if (!isHost && !isCaller) return;
+    // VIP rooms have 0 ads for EVERYONE in the room
+    if (mesa.isVip) {
+      await doRestart();
+    } else {
+      setPendingActionAfterAd(() => () => doRestart());
+      setShowAd(true);
+    }
   }
 
   function sendChat(text: string) {
@@ -397,20 +708,218 @@ function JugarPage() {
     setActiveModal(null);
   }
 
+  // Motor de cartas y resolución de partida automática (Resiliente a desconexión del host)
   useEffect(() => {
-    if (!isHost || !mesa || mesa.status !== "en-juego" || paused || won || mesa.serverPaused || drawnIdx < 0) return;
-    if (!mesa.deck || mesa.deck.length === 0) return;
+    if (!isCaller || !mesa || mesa.status !== "en-juego" || paused || won || mesa.serverPaused || drawnIdx < 0) return;
+    if (!mesa.deck || mesa.deck.length === 0 || mesa.winner) return;
     
     const interval = setInterval(() => {
       if (drawnIdx < (mesa.deck?.length || 0) - 1) {
         update(ref(database, `mesas/${id}`), { drawnIdx: drawnIdx + 1 }).catch(() => {});
       } else {
-        setPaused(true);
+        // La baraja terminó: dar un ganador al azar si nadie cantó victoria
+        if (!mesa.winner) {
+          const playersList = Object.values(mesa.players || {});
+          if (playersList.length > 0) {
+            const randomWinner = playersList[Math.floor(Math.random() * playersList.length)];
+            const prize = mesa.prizePool || 0;
+            update(ref(database, `mesas/${id}`), {
+              winner: {
+                name: randomWinner.name,
+                isBot: randomWinner.status === "disconnected",
+                prize,
+                reason: "random_finish",
+                timestamp: Date.now(),
+              },
+              nextRoundAt: Date.now() + 60000,
+              prizePool: 0,
+              serverPaused: true,
+              status: "terminada",
+            }).catch(() => {});
+          } else {
+            setPaused(true);
+          }
+        } else {
+          setPaused(true);
+        }
       }
     }, speedFor(mesa.mode));
     
     return () => clearInterval(interval);
-  }, [isHost, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, mesa?.deck?.length, id]);
+  }, [isCaller, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, mesa?.deck?.length, mesa?.winner, mesa?.players, mesa?.prizePool, id]);
+
+  // Bot automático: juega por los invitados o anfitriones desconectados mientras se reconectan
+  useEffect(() => {
+    if (!isCaller || !mesa || mesa.status !== "en-juego" || mesa.serverPaused || !mesa.deck || drawnIdx < 0 || mesa.winner) return;
+    const card = mesa.deck[drawnIdx];
+    if (!card || !mesa.players) return;
+
+    Object.values(mesa.players).forEach((player: PlayerGameSession) => {
+      if (player.status !== "disconnected" && !player.botActive) return;
+      if (!player.tablas || !Array.isArray(player.tablas) || player.tablas.length === 0) return;
+
+      const playerMarkedSet = new Set<string>(player.marked || []);
+      let changed = false;
+
+      player.tablas.forEach((t) => {
+        if (t.cards && t.cards.includes(card)) {
+          const markKey = `${t.id}-${card}`;
+          if (!playerMarkedSet.has(markKey)) {
+            playerMarkedSet.add(markKey);
+            changed = true;
+          }
+        }
+      });
+
+      if (changed) {
+        const nextArr = Array.from(playerMarkedSet);
+        update(ref(database, `mesas/${id}/players/${player.name}`), {
+          marked: nextArr,
+        }).catch(() => {});
+
+        // Verificar si la computadora completó la tabla ganadora para el usuario ausente
+        const botWon = player.tablas.some((t) =>
+          checkWin(mesa.mode, t.size, t.cards, (c) => playerMarkedSet.has(`${t.id}-${c}`))
+        );
+
+        if (botWon && !mesa.winner) {
+          const prize = mesa.prizePool || 0;
+          update(ref(database, `mesas/${id}`), {
+            winner: {
+              name: player.name,
+              isBot: true,
+              prize,
+              reason: "loteria",
+              timestamp: Date.now(),
+            },
+            nextRoundAt: Date.now() + 60000,
+            prizePool: 0,
+            serverPaused: true,
+            status: "terminada",
+          }).catch(() => {});
+        }
+      }
+    });
+  }, [drawnIdx, isCaller, mesa, id]);
+
+  // Notificaciones de desconexión y reconexión en vivo
+  const prevStatusesRef = useRef<Record<string, string>>({});
+  const [connectionToast, setConnectionToast] = useState<{ msg: string; type: "disconnect" | "reconnect" } | null>(null);
+
+  useEffect(() => {
+    if (!mesa?.players) return;
+    const prev = prevStatusesRef.current;
+    Object.entries(mesa.players).forEach(([pName, pData]: [string, any]) => {
+      if (pName === userName) return;
+      const prevStatus = prev[pName];
+      const currentStatus = pData.status;
+      if (prevStatus === "active" && currentStatus === "disconnected") {
+        setConnectionToast({
+          msg: `⚡ ${pName} se ha desconectado. La computadora jugará por él hasta que regrese.`,
+          type: "disconnect",
+        });
+        setTimeout(() => setConnectionToast(null), 4500);
+      } else if (prevStatus === "disconnected" && currentStatus === "active") {
+        setConnectionToast({
+          msg: `🎮 ${pName} se ha reconectado a la partida.`,
+          type: "reconnect",
+        });
+        setTimeout(() => setConnectionToast(null), 4500);
+      }
+      prev[pName] = currentStatus;
+    });
+  }, [mesa?.players, userName]);
+
+  // Listener universal de ganador para premiar y festejar en todos los clientes
+  const [awardedWinnerTimestamp, setAwardedWinnerTimestamp] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!mesa?.winner) return;
+    if (awardedWinnerTimestamp === mesa.winner.timestamp) return;
+
+    setAwardedWinnerTimestamp(mesa.winner.timestamp);
+
+    // Si el jugador local resultó ganador (por bot o al azar) y no ha cobrado
+    if (mesa.winner.name === userName && mesa.winner.prize > 0 && !won) {
+      setCoins((prev) => prev + mesa.winner.prize);
+      if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
+      if (settings.vibration && navigator.vibrate) navigator.vibrate([500, 200, 500]);
+    } else if (mesa.winner.name !== userName) {
+      if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
+    }
+  }, [mesa?.winner, userName, won, awardedWinnerTimestamp, settings.effects, settings.vibration]);
+
+  // Contador de 60s para iniciar la siguiente ronda automáticamente
+  const [secondsLeft, setSecondsLeft] = useState<number>(60);
+
+  useEffect(() => {
+    if (!mesa?.winner || !mesa?.nextRoundAt) {
+      setSecondsLeft(60);
+      return;
+    }
+
+    const checkTimer = () => {
+      const now = Date.now();
+      const diff = Math.max(0, Math.ceil((mesa.nextRoundAt! - now) / 1000));
+      setSecondsLeft(diff);
+
+      if (diff <= 0 && isCaller) {
+        doRestart();
+      }
+    };
+
+    checkTimer();
+    const timer = setInterval(checkTimer, 500);
+    return () => clearInterval(timer);
+  }, [mesa?.winner, mesa?.nextRoundAt, isCaller]);
+
+  // Tabla resumen de ganadores del 1º hasta el último puesto
+  const leaderboard = useMemo(() => {
+    if (!mesa?.players) return [];
+    const playersList = Object.values(mesa.players);
+    if (playersList.length === 0) return [];
+
+    const winnerName = mesa.winner?.name;
+    const isVipRound = Boolean(mesa.isVip && mesa.rounds && mesa.currentRound);
+    const roundPrize = isVipRound
+      ? (mesa.rounds?.[(mesa.currentRound || 1) - 1]?.prize || `${mesa.winner?.prize || 0} 🪙`)
+      : `${mesa.winner?.prize || 0} 🪙`;
+
+    const totalCells = mesa.size === "5x5" ? 25 : 16;
+
+    const evaluated = playersList.map((p) => {
+      const pMarks = new Set(p.marked || []);
+      let bestCount = 0;
+      if (p.tablas && Array.isArray(p.tablas)) {
+        p.tablas.forEach((t) => {
+          const matched = t.cards.filter((c) => pMarks.has(`${t.id}-${c}`)).length;
+          if (matched > bestCount) bestCount = matched;
+        });
+      }
+      const isWinner = p.name === winnerName;
+      return {
+        name: p.name,
+        isWinner,
+        isLocal: p.name === userName,
+        isBot: Boolean(p.status === "disconnected" || p.botActive),
+        bestCount: isWinner ? totalCells : bestCount,
+        totalCells,
+      };
+    });
+
+    evaluated.sort((a, b) => {
+      if (a.isWinner) return -1;
+      if (b.isWinner) return 1;
+      if (b.bestCount !== a.bestCount) return b.bestCount - a.bestCount;
+      return a.name.localeCompare(b.name);
+    });
+
+    return evaluated.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      prizeText: item.isWinner ? roundPrize : "—",
+    }));
+  }, [mesa?.players, mesa?.winner, mesa?.isVip, mesa?.rounds, mesa?.currentRound, mesa?.size, userName]);
 
   if (loading) return <BrandBackground><div className="grid min-h-[100dvh] place-items-center text-white">Cargando...</div></BrandBackground>;
   
@@ -446,7 +955,7 @@ function JugarPage() {
         {/* Modals & Overlays */}
           {activeModal === "exitConfirm" && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-              <div className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 ring-1 ring-white/10 shadow-2xl animate-pop-in border border-white/20 text-center">
+              <div className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 ring-1 ring-white/10 shadow-2xl animate-modal-in border border-white/20 text-center">
                 <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mx-auto mb-4 border border-red-500/30">
                   <ArrowLeft className="w-8 h-8" />
                 </div>
@@ -462,6 +971,21 @@ function JugarPage() {
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => {
+                      const otherPlayers = Object.keys(mesa?.players || {}).filter((p) => p !== userName);
+                      if (isHost) {
+                        if (otherPlayers.length === 0) {
+                          remove(ref(database, `mesas/${id}`)).catch(() => {});
+                        } else {
+                          const nextHost = otherPlayers[0];
+                          update(ref(database, `mesas/${id}`), {
+                            host: nextHost,
+                            [`players/${nextHost}/role`]: "host"
+                          }).catch(() => {});
+                          remove(ref(database, `mesas/${id}/players/${userName}`)).catch(() => {});
+                        }
+                      } else {
+                        remove(ref(database, `mesas/${id}/players/${userName}`)).catch(() => {});
+                      }
                       setActiveModal(null);
                       navigate({ to: "/menu" });
                     }}
@@ -512,63 +1036,191 @@ function JugarPage() {
           </div>
         )}
 
-        {/* WIN OVERLAY (Confetti Effect could be CSS animation applied here based on settings.confetti) */}
-        {won && (
-          <div className="absolute inset-0 z-50 bg-[color:var(--brand-navy-deep)]/80 flex items-center justify-center p-6 backdrop-blur-sm">
-            {settings.confetti && <div className="absolute inset-0 pointer-events-none bg-[url('https://cdn-icons-png.flaticon.com/512/1795/1795325.png')] bg-[length:50px] animate-confetti-fall opacity-40"></div>}
-            <div className="bg-[color:var(--brand-navy)] p-6 rounded-3xl shadow-2xl text-center border-2 border-[color:var(--brand-gold)] w-full max-w-sm animate-pop-in relative z-10 flex flex-col gap-3">
-              <h2 className="text-5xl font-black text-[color:var(--brand-gold)] mb-2 drop-shadow-md">¡Lotería!</h2>
-              <p className="text-white mb-2 font-medium">Has ganado la partida.</p>
+        {/* TABLA DE GANADORES Y RESUMEN DE LA RONDA CON CONTADOR AUTOMÁTICO */}
+        {(won || Boolean(mesa?.winner)) && !winDismissed && (
+          <div className="absolute inset-0 z-50 bg-[color:var(--brand-navy-deep)]/90 flex items-center justify-center p-3 sm:p-4 backdrop-blur-md animate-fade-in">
+            {settings.confetti && <div className="absolute inset-0 pointer-events-none bg-[url('https://cdn-icons-png.flaticon.com/512/1795/1795325.png')] bg-[length:50px] animate-confetti-fall opacity-35" />}
+            
+            <div className="bg-gradient-to-b from-[color:var(--brand-navy)] via-[color:var(--brand-navy-deep)] to-slate-950 p-4 sm:p-5 rounded-3xl shadow-2xl border-2 border-[color:var(--brand-gold)] w-full max-w-md animate-modal-in relative z-10 flex flex-col gap-3 max-h-[92vh] overflow-hidden">
               
-              <div className="bg-white/5 rounded-2xl p-4 mb-2 border border-white/10">
-                <span className="text-white/60 text-xs uppercase tracking-wider font-bold block mb-1">Premio Obtenido</span>
-                <span className="text-[color:var(--brand-gold)] text-4xl font-black flex items-center justify-center gap-2">
-                  🪙 {mesa?.prizePool || 0}
-                </span>
+              {/* Header */}
+              <div className="text-center shrink-0">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[10px] font-black uppercase tracking-wider mb-1">
+                  <Trophy className="w-3.5 h-3.5" />
+                  <span>Resumen de la Ronda {mesa?.currentRound ? `#${mesa.currentRound}` : ""}</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-[color:var(--brand-gold)] drop-shadow-md">
+                  {mesa?.winner?.reason === "random_finish" ? "¡Fin de Partida!" : "¡Lotería!"}
+                </h2>
+                <p className="text-white/80 text-xs mt-0.5">
+                  Ganador: <strong className="text-[color:var(--brand-cyan)] font-extrabold">{mesa?.winner?.name || "Jugador"}</strong>
+                  {mesa?.winner?.isBot && <span className="text-amber-300 ml-1 font-bold">(🤖 Computadora)</span>}
+                  {mesa?.winner?.reason === "random_finish" && <span className="block text-[11px] text-white/50 mt-0.5">Baraja agotada — Ganador asignado al azar</span>}
+                </p>
               </div>
-              
-              <button  
-                onClick={() => {
-                  setWinDismissed(true);
-                  update(ref(database, `mesas/${id}`), { serverPaused: false }).catch(() => {});
-                  if (isHost) setPaused(false);
-                }} 
-                className="w-full bg-white/10 text-white font-black py-4 rounded-full text-lg hover:bg-white/20 active:scale-95 shadow-md transition-all border border-white/20"
-              >
-                Seguir jugando
-              </button>
-              
-              {isHost && (
-                <>
-                  <div className="flex justify-between items-center bg-white/5 rounded-2xl p-4 border border-white/10 mb-4 animate-slide-up-soft">
-                    <span className="text-white font-bold">Estado de la mesa</span>
-                    <span className="bg-white/10 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-white/20">
-                      {mesa?.status}
-                    </span>
-                  </div>
-                  {mesa?.status === "abierta" && (
-                    <button 
-                      onClick={() => update(ref(database, `mesas/${id}`), { status: "en-juego" })}
-                      className="w-full bg-[color:var(--brand-gold)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-full text-lg shadow-[0_0_20px_rgba(255,215,0,0.3)] hover:scale-[1.02] active:scale-95 transition-all mb-4"
+
+              {/* Leaderboard Table / Resumen de Ganadores */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2 hide-scrollbar min-h-[140px] max-h-[300px]">
+                <div className="text-[10px] font-black text-white/50 uppercase tracking-wider flex items-center justify-between px-2 pb-1 border-b border-white/10">
+                  <span>Puesto & Jugador</span>
+                  <span>Premio</span>
+                </div>
+
+                {leaderboard.map((entry) => {
+                  const isGold = entry.rank === 1;
+                  const isSilver = entry.rank === 2;
+                  const isBronze = entry.rank === 3;
+                  
+                  return (
+                    <div
+                      key={entry.name}
+                      className={`flex items-center justify-between p-2.5 rounded-2xl transition-all border ${
+                        isGold
+                          ? "bg-gradient-to-r from-amber-500/25 via-yellow-500/15 to-transparent border-amber-400/60 shadow-md shadow-amber-500/15"
+                          : entry.isLocal
+                          ? "bg-cyan-500/15 border-cyan-400/40"
+                          : "bg-white/5 border-white/10"
+                      }`}
                     >
-                      Comenzar Partida
-                    </button>
-                  )}
-                </>
-              )}
-              
-              <button onClick={() => navigate({ to: "/mesa/$id", params: { id: mesa.id } })} className="w-full bg-transparent text-white/50 font-bold py-2 mt-2 rounded-full text-sm hover:text-white active:scale-95 transition-colors">
-                Salir de la mesa
-              </button>
+                      {/* Left: Rank & Player info */}
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                          isGold
+                            ? "bg-gradient-to-br from-amber-300 to-yellow-500 text-slate-950 shadow-md"
+                            : isSilver
+                            ? "bg-slate-300 text-slate-900"
+                            : isBronze
+                            ? "bg-amber-700/80 text-amber-100"
+                            : "bg-white/10 text-white/70"
+                        }`}>
+                          {isGold ? "🥇" : isSilver ? "🥈" : isBronze ? "🥉" : `#${entry.rank}`}
+                        </div>
+
+                        <div className="truncate">
+                          <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                            <span className="truncate">{entry.name}</span>
+                            {entry.isLocal && (
+                              <span className="text-[9px] bg-cyan-400/20 text-cyan-300 px-1.5 py-0.2 rounded font-black border border-cyan-400/40 shrink-0">
+                                Tú
+                              </span>
+                            )}
+                            {entry.isBot && (
+                              <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1.5 py-0.2 rounded font-black border border-amber-400/40 shrink-0">
+                                🤖 Bot
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-white/50 flex items-center gap-1 mt-0.5">
+                            {entry.isWinner ? (
+                              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                <Check className="w-3 h-3" /> ¡Lotería!
+                              </span>
+                            ) : (
+                              <span>{entry.bestCount} de {entry.totalCells} cartas</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Prize Column */}
+                      <div className="shrink-0 pl-2">
+                        {entry.isWinner ? (
+                          <span className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-xs px-3 py-1 rounded-full shadow-lg shadow-amber-500/30">
+                            <CoinAnimation className="w-3.5 h-3.5" />
+                            <span>{entry.prizeText}</span>
+                          </span>
+                        ) : (
+                          <span className="text-white/30 text-xs font-bold px-2">
+                            {entry.prizeText}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* VIP 0-Ads Notice vs Standard Notice */}
+              {mesa?.isVip ? (
+                <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[11px] font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>Sala VIP: Cero anuncios entre rondas</span>
+                </div>
+              ) : null}
+
+              {/* Auto Countdown & Control Bar */}
+              <div className="shrink-0 flex flex-col gap-2 pt-1 border-t border-white/10">
+                {/* Countdown Timer Display */}
+                <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs">
+                  <div className="flex items-center gap-2 text-white/80 font-bold">
+                    <TimerIcon className="w-4 h-4 text-amber-400 animate-spin" />
+                    <span>Siguiente ronda automática:</span>
+                  </div>
+                  <span className="font-black text-sm text-[color:var(--brand-gold)] font-mono">
+                    {Math.floor(secondsLeft / 60)}:{(secondsLeft % 60).toString().padStart(2, "0")}
+                  </span>
+                </div>
+
+                {/* Host Start Immediately button */}
+                {isHost ? (
+                  <button
+                    onClick={restart}
+                    className="w-full py-3 px-4 rounded-full font-black text-sm bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95 hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>Comenzar Siguiente Ronda Ya</span>
+                  </button>
+                ) : (
+                  <div className="text-center text-[11px] text-white/50 py-0.5 font-semibold animate-pulse">
+                    Comenzará al terminar el tiempo o si el anfitrión le da comenzar.
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => {
+                      const otherPlayers = Object.keys(mesa?.players || {}).filter((p) => p !== userName);
+                      if (isHost && otherPlayers.length === 0) {
+                        remove(ref(database, `mesas/${id}`)).catch(() => {});
+                      } else {
+                        remove(ref(database, `mesas/${id}/players/${userName}`)).catch(() => {});
+                      }
+                      navigate({ to: "/menu" });
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 text-xs font-bold transition active:scale-95 text-center"
+                  >
+                    Salir al Menú
+                  </button>
+                  <button
+                    onClick={() => navigate({ to: "/mesa/$id", params: { id: mesa.id } })}
+                    className="flex-1 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white/80 hover:text-white text-xs font-bold transition active:scale-95 border border-white/10 text-center"
+                  >
+                    Salir a la sala
+                  </button>
+                  <button
+                    onClick={() => setWinDismissed(true)}
+                    className="py-2 px-2.5 rounded-xl bg-transparent hover:bg-white/5 text-white/40 hover:text-white text-xs font-medium transition text-center"
+                  >
+                    Ver cartas
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
         )}
 
         {/* --- MODALS (Settings, Stickers, Tables, Modes, Chat) --- */}
         {activeModal && activeModal !== "menu" && (
-          <div className="absolute inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-[2px]">
+          <div 
+            onClick={() => setActiveModal(null)}
+            className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"
+          >
             {/* Modal Container */}
-            <div className={`bg-white w-full max-w-md rounded-3xl overflow-hidden flex flex-col animate-pop-in shadow-2xl max-h-[85vh]`}>
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className={`bg-white w-full max-w-md rounded-3xl overflow-hidden flex flex-col animate-modal-in shadow-2xl max-h-[85vh]`}
+            >
               
               {/* Default Brand Header for others */}
               {["chat", "players", "tablas", "modos", "settings", "stickers"].includes(activeModal) && (
@@ -583,7 +1235,7 @@ function JugarPage() {
               )}
 
               {/* Modal Body */}
-              <div className="overflow-y-auto flex-1 bg-[color:var(--brand-navy)]">
+              <div className="flex-1 bg-[color:var(--brand-navy)] scroll-touch-y">
                 
                 {/* SETTINGS UI */}
                 {activeModal === "settings" && (
@@ -640,12 +1292,47 @@ function JugarPage() {
                 {/* STICKERS UI */}
                 {activeModal === "stickers" && (
                   <div className="flex flex-col h-[60vh] bg-[color:var(--brand-navy-deep)]">
-                    <div className="flex justify-around bg-[color:var(--brand-navy)] border-b border-white/10 font-bold text-white/50 shrink-0">
-                      <button onClick={() => setStickerTab("clasicos")} className={`py-3 px-4 border-b-2 transition-colors ${stickerTab === 'clasicos' ? 'border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)]' : 'border-transparent hover:text-white'}`}>Clásicos</button>
-                      <button onClick={() => setStickerTab("gifs")} className={`py-3 px-4 border-b-2 transition-colors ${stickerTab === 'gifs' ? 'border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)]' : 'border-transparent hover:text-white'}`}>GIFs</button>
-                      <button onClick={() => setStickerTab("cartas")} className={`py-3 px-4 border-b-2 transition-colors ${stickerTab === 'cartas' ? 'border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)]' : 'border-transparent hover:text-white'}`}>Cartas</button>
+                    <div className="flex justify-around bg-[color:var(--brand-navy)] border-b border-white/10 font-bold text-white/50 shrink-0 text-xs">
+                      <button onClick={() => setStickerTab("botin")} className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1 ${stickerTab === 'botin' ? 'border-amber-400 text-amber-300 font-black' : 'border-transparent hover:text-white'}`}>🎒 Mi Botín</button>
+                      <button onClick={() => setStickerTab("clasicos")} className={`py-3 px-3 border-b-2 transition-colors ${stickerTab === 'clasicos' ? 'border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)]' : 'border-transparent hover:text-white'}`}>Clásicos</button>
+                      <button onClick={() => setStickerTab("gifs")} className={`py-3 px-3 border-b-2 transition-colors ${stickerTab === 'gifs' ? 'border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)]' : 'border-transparent hover:text-white'}`}>GIFs</button>
+                      <button onClick={() => setStickerTab("cartas")} className={`py-3 px-3 border-b-2 transition-colors ${stickerTab === 'cartas' ? 'border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)]' : 'border-transparent hover:text-white'}`}>Cartas</button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-4 auto-rows-max">
+                    <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-3 auto-rows-max">
+                      {stickerTab === "botin" && (
+                        <>
+                          <div className="col-span-4 text-[11px] font-game text-amber-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <span>✨</span> Stickers Especiales de Cofres
+                          </div>
+                          {SPECIAL_STICKERS.map((stk) => (
+                            <button
+                              key={`botin-${stk.id}`}
+                              onClick={() => stk.image && sendChat(`[STICKER:${stk.image}]`)}
+                              className="aspect-square bg-gradient-to-b from-white/10 to-white/5 hover:bg-white/20 rounded-2xl transition-all active:scale-95 flex flex-col items-center justify-center p-2 border border-amber-400/30 shadow-md group"
+                            >
+                              {stk.image ? (
+                                <img src={stk.image} className="w-12 h-12 object-contain drop-shadow-md group-hover:scale-110 transition-transform" loading="lazy" alt={stk.title} />
+                              ) : (
+                                <span className="text-3xl">{stk.emoji}</span>
+                              )}
+                              <span className="text-[9px] font-game text-white/80 mt-1 truncate max-w-full">{stk.title}</span>
+                            </button>
+                          ))}
+
+                          <div className="col-span-4 text-[11px] font-game text-cyan-300 uppercase tracking-wider mt-3 mb-1 flex items-center gap-1">
+                            <span>💬</span> Reacciones Rápidas de Emojis
+                          </div>
+                          {["🪅", "🔥", "👑", "🍀", "⚡", "🌮", "🎺", "💎", "✨", "❤️", "💀", "😎"].map((em, idx) => (
+                            <button
+                              key={`emoji-${idx}`}
+                              onClick={() => sendChat(em)}
+                              className="aspect-square bg-white/5 hover:bg-white/20 rounded-2xl transition-colors active:scale-95 flex items-center justify-center text-3xl border border-white/10 shadow-sm"
+                            >
+                              {em}
+                            </button>
+                          ))}
+                        </>
+                      )}
                       {stickerTab === "clasicos" && Array.from({length: 76}).map((_, i) => (
                         <button key={`clasico-${i}`} onClick={() => sendChat(`[STICKER:${i}.png]`)} className="aspect-square bg-white/5 hover:bg-white/20 rounded-xl transition-colors active:scale-95 flex items-center justify-center p-2 border border-white/10">
                           <img src={`/stickers/${i}.png`} className="w-full h-full object-contain drop-shadow-sm" loading="lazy" alt={`Sticker ${i}`} />
@@ -670,12 +1357,42 @@ function JugarPage() {
                    <div className="p-4 h-full min-h-[300px]">
                       {activeModal === "players" && (
                         <div className="flex flex-col gap-2">
-                          {connectedPlayers.map(p => (
-                            <div key={p} className="flex items-center justify-between bg-white/10 p-3 rounded-xl border border-white/5">
-                              <span className="text-white font-bold flex items-center gap-2"><Users className="w-4 h-4 text-[color:var(--brand-cyan)]" /> {p}</span>
-                              {p === mesa.host && <span className="text-[10px] bg-[color:var(--brand-gold)] text-black px-2 py-0.5 rounded-full font-bold">ANFITRIÓN</span>}
-                            </div>
-                          ))}
+                          {connectedPlayers.map((p) => {
+                            const pData = mesa.players?.[p];
+                            const isDisconnected = pData?.status === "disconnected";
+                            const isPlayerSpectator = pData?.role === "spectator" || pData?.status === "spectator";
+                            return (
+                              <div key={p} className="flex items-center justify-between bg-white/10 p-3 rounded-xl border border-white/5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                    isDisconnected ? "bg-amber-400 animate-pulse" : isPlayerSpectator ? "bg-purple-400" : "bg-emerald-400"
+                                  }`} />
+                                  <span className="text-white font-bold truncate flex items-center gap-1.5">
+                                    <Users className="w-4 h-4 text-[color:var(--brand-cyan)] shrink-0" />
+                                    <span>{p}</span>
+                                    {p === userName && <span className="text-[10px] text-white/50">(Tú)</span>}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {isPlayerSpectator && (
+                                    <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-400/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                      👀 Espectador
+                                    </span>
+                                  )}
+                                  {isDisconnected && !isPlayerSpectator && (
+                                    <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                      🤖 Bot jugando
+                                    </span>
+                                  )}
+                                  {p === mesa.host && (
+                                    <span className="text-[10px] bg-[color:var(--brand-gold)] text-black px-2 py-0.5 rounded-full font-bold">
+                                      ANFITRIÓN
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                       
@@ -705,8 +1422,9 @@ function JugarPage() {
                             <input 
                               type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && sendChat(chatInput)}
-                              placeholder="Mensaje..."
-                              className="flex-1 bg-white/10 border border-white/20 rounded-full px-4 py-2 text-white text-sm outline-none focus:border-[color:var(--brand-cyan)]"
+                              placeholder="Escribe un mensaje..."
+                              autoFocus
+                              className="flex-1 bg-white/10 border border-white/20 rounded-full px-4 py-2 text-white text-sm outline-none focus:border-[color:var(--brand-cyan)] transition"
                             />
                             <button onClick={() => sendChat(chatInput)} className="w-10 h-10 rounded-full bg-[color:var(--brand-cyan)] flex items-center justify-center text-[color:var(--brand-navy-deep)] shrink-0 active:scale-95">
                               <Send className="w-4 h-4" />
@@ -717,12 +1435,59 @@ function JugarPage() {
 
                       {activeModal === "tablas" && (
                         <div className="flex flex-col gap-3">
-                          {isGameStarted && <p className="text-[color:var(--brand-gold)] text-sm text-center mb-2 font-bold">No puedes cambiar de tablas durante una partida en curso.</p>}
+                          {/* Quick selection of count: 1, 2, 4, 8 */}
+                          <div className="flex items-center justify-between bg-black/40 p-2.5 rounded-2xl border border-white/10 mb-1">
+                            <span className="text-xs font-bold text-white/80">Cantidad de tablas:</span>
+                            <div className="flex gap-1.5">
+                              {[1, 2, 4, 8].map(qty => (
+                                <button
+                                  key={qty}
+                                  type="button"
+                                  onClick={() => {
+                                    let allTablas = loadTablas().filter(t => t.size === mesa.size);
+                                    if (allTablas.length < qty) {
+                                      const need = qty - allTablas.length;
+                                      const generated: Tabla[] = [];
+                                      for (let i = 0; i < need; i++) {
+                                        generated.push({
+                                          id: Math.random().toString(36).substring(2, 9),
+                                          size: mesa.size,
+                                          cards: randomCards(mesa.size),
+                                          createdAt: Date.now() + i,
+                                        });
+                                      }
+                                      try {
+                                        const full = loadTablas();
+                                        localStorage.setItem("garza:tablas", JSON.stringify([...full, ...generated]));
+                                      } catch {}
+                                      allTablas = [...allTablas, ...generated];
+                                    }
+                                    const picked = allTablas.slice(0, qty);
+                                    setTablasActivas(picked);
+                                    setMarked(new Set());
+                                    setActivePageIndex(0);
+                                    try {
+                                      localStorage.setItem(`garza:selectedTablas:${id}`, JSON.stringify(picked.map(p => p.id)));
+                                    } catch {}
+                                    setActiveModal(null);
+                                  }}
+                                  className={`px-2.5 py-1 rounded-xl text-xs font-black border transition ${
+                                    tablasActivas.length === qty
+                                      ? "bg-amber-400 text-slate-950 border-amber-300 shadow"
+                                      : "bg-white/10 text-white/70 border-white/10 hover:bg-white/20"
+                                  }`}
+                                >
+                                  {qty} {qty === 1 ? "tabla" : "tablas"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
                           <div className="grid grid-cols-2 gap-4">
                             {loadTablas().filter(t => t.size === mesa.size).map((t, idx) => {
                             const isActiva = tablasActivas.some(act => act.id === t.id);
                             return (
-                              <button key={t.id} disabled={isGameStarted} onClick={() => { 
+                              <button key={t.id} onClick={() => { 
                                   // toggle this table
                                   let newActive = [...tablasActivas];
                                   if (isActiva) {
@@ -772,13 +1537,18 @@ function JugarPage() {
                                   style={{ gridTemplateColumns: `repeat(${t.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}
                                 >
                                   {t.cards.map((c, i) => {
-                                    const card = getCard(c);
+                                    const card = getThemedCard(c, deckSkin.id);
                                     return (
                                       <div key={i} className="relative aspect-[3/4] ring-1 ring-white/10">
                                         <img
                                           src={card?.image}
                                           alt={card?.name ?? `Carta ${c}`}
-                                          loading="lazy"
+                                          decoding="async"
+                                          onError={(e) => {
+                                            if (card?.fallbackImage && e.currentTarget.src !== card.fallbackImage) {
+                                              e.currentTarget.src = card.fallbackImage;
+                                            }
+                                          }}
                                           className="h-full w-full object-cover"
                                         />
                                       </div>
@@ -870,16 +1640,29 @@ function JugarPage() {
           <button onClick={() => setActiveModal("exitConfirm")} className="p-2 -ml-2 text-white/80 active:scale-95 hover:text-white transition">
             <ArrowLeft className="w-6 h-6" strokeWidth={2.5} />
           </button>
+
+        {/* Floating Disconnect/Reconnect notification */}
+        {connectionToast && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-sm px-3.5 py-2.5 rounded-2xl bg-slate-900/95 border border-amber-400/40 text-amber-200 text-xs font-bold text-center shadow-2xl backdrop-blur animate-fade-in flex items-center justify-center gap-2">
+            <span>{connectionToast.msg}</span>
+          </div>
+        )}
           
           <div className="flex flex-1 items-center gap-2 ml-2 text-[10px] font-bold">
-            <div className="flex items-center gap-1 bg-black/40 rounded-full px-2 py-1 border border-white/10 shadow-inner">
-              <span>🪙</span>
-              <span className="text-[color:var(--brand-gold)]">{coins}</span>
+            <div className="flex items-center gap-1.5 bg-black/50 rounded-full px-2.5 py-1 border border-white/10 shadow-inner">
+              <CoinAnimation className="w-4 h-4" />
+              <span className="text-[color:var(--brand-gold)] font-extrabold text-xs">{coins.toLocaleString()}</span>
             </div>
             <div className="flex items-center gap-1 bg-[color:var(--brand-gold)]/20 rounded-full px-2 py-1 border border-[color:var(--brand-gold)]/40">
               <span>🏆</span>
               <span className="text-[color:var(--brand-gold)]">{mesa?.prizePool || 0}</span>
             </div>
+            {mesa?.isVip && (
+              <div className="flex items-center gap-1 bg-gradient-to-r from-amber-400/25 to-yellow-500/25 rounded-full px-2 py-0.5 border border-amber-400/50 text-[9px] text-amber-300 font-black shadow-sm">
+                <Crown className="w-2.5 h-2.5 fill-current" />
+                <span>VIP {mesa.rounds ? `R${mesa.currentRound || 1}/${mesa.rounds.length}` : ""}</span>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-4 text-[color:var(--brand-cyan)]">
@@ -903,103 +1686,269 @@ function JugarPage() {
           </div>
         </header>
 
-        <div className="h-12 bg-[color:var(--brand-navy)] flex items-center px-2 gap-2 overflow-x-auto shrink-0 z-30 relative shadow-md border-b border-white/5 hide-scrollbar">
-          {["¡Espera!", "¡Estoy listo!", "¡Ok!", "¡Continúa!"].map((txt) => (
-            <button key={txt} onClick={() => sendChat(txt)} className="whitespace-nowrap px-3 py-1.5 bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] text-xs font-bold rounded shadow-sm active:scale-95 transition-transform">
-              {txt}
-            </button>
-          ))}
-          <button onClick={() => sendChat("❤️")} className="p-1.5 shrink-0 active:scale-95">
-            <Heart className="w-5 h-5 text-[color:var(--brand-pink)] fill-[color:var(--brand-pink)]" />
-          </button>
-          <button onClick={() => setActiveModal("stickers")} className="p-1.5 shrink-0 active:scale-95 bg-white/10 rounded shadow-sm border border-white/10">
-            <ImageIcon className="w-4 h-4 text-white" />
-          </button>
-        </div>
+        {/* Spectator Mode Top Banner */}
+        {isSpectator && (
+          <div className="w-full bg-gradient-to-r from-purple-950 via-indigo-900 to-purple-950 border-b border-purple-400/40 px-3.5 py-2 flex items-center justify-between text-xs text-purple-200 z-20 shadow-lg backdrop-blur">
+            <div className="flex items-center gap-2 font-medium">
+              <span className="text-base animate-bounce">👀</span>
+              <span>
+                <strong className="text-white font-black">Modo Espectador:</strong> Observando ronda en curso. Comenzarás a jugar automáticamente en la siguiente ronda (cuando haya Lotería).
+              </span>
+            </div>
+            <span className="shrink-0 text-[10px] bg-purple-400/25 text-purple-200 px-2.5 py-1 rounded-full border border-purple-400/40 font-black uppercase tracking-wider ml-2">
+              Próxima ronda
+            </span>
+          </div>
+        )}
 
-        {/* INLINE LIVE CHAT */}
-        <div className="h-[72px] bg-black/20 shrink-0 border-b border-white/5 p-2 overflow-y-auto flex flex-col-reverse shadow-inner relative z-20">
-          <div className="flex flex-col gap-1 w-full max-w-[800px] mx-auto">
-            {chatMsgs.slice(-5).map((msg, idx) => (
-              <div key={idx} className="text-[11px] leading-tight animate-fade-in-right">
-                <span className="font-bold text-[color:var(--brand-cyan)]">{msg.sender}: </span>
-                <span className="text-white/90">{msg.text}</span>
+        {/* TOP DASHBOARD: CHAT ARRIBA A LA IZQUIERDA | BARAJA A VOCEAR ARRIBA A LA DERECHA */}
+        <section aria-label="Panel de juego" className="w-full max-w-[800px] mx-auto px-3 pt-2 pb-1 grid grid-cols-[1fr_auto] gap-2.5 shrink-0 z-20">
+          
+          {/* CHAT DE JUEGO (ARRIBA A LA IZQUIERDA - CLIC DIRECTO PARA ABRIR Y ESCRIBIR) */}
+          <div 
+            onClick={() => setActiveModal("chat")}
+            className="flex flex-col justify-between bg-black/35 hover:bg-black/45 active:scale-[0.99] border border-white/10 hover:border-cyan-400/40 rounded-2xl p-2 shadow-inner h-[116px] overflow-hidden backdrop-blur-md cursor-pointer transition select-none group"
+            title="Toca para abrir el chat y escribir"
+          >
+            {/* Header with quick sticker/reaction tools */}
+            <div className="flex items-center justify-between pb-1 border-b border-white/10 text-[10px] shrink-0">
+              <div className="flex items-center gap-1.5 font-bold text-white/90">
+                <MessageCircle className="w-3.5 h-3.5 text-[color:var(--brand-cyan)]" />
+                <span>Chat de juego</span>
+                {chatMsgs.length > 0 && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                )}
               </div>
-            ))}
-            {chatMsgs.length === 0 && (
-              <div className="text-[11px] text-white/30 italic text-center w-full mt-4">No hay mensajes aún</div>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); sendChat("❤️"); }} 
+                  className="p-1 rounded-full hover:bg-white/10 active:scale-90 text-[color:var(--brand-pink)] transition"
+                  title="Enviar corazón"
+                >
+                  <Heart className="w-3.5 h-3.5 fill-current" />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setActiveModal("stickers"); }} 
+                  className="p-1 rounded-full hover:bg-white/10 active:scale-90 text-white/70 hover:text-white transition"
+                  title="Enviar Stickers"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setActiveModal("chat"); }} 
+                  className="text-[9px] font-bold text-[color:var(--brand-cyan)] group-hover:underline ml-0.5"
+                >
+                  Abrir
+                </button>
+              </div>
+            </div>
+
+            {/* Live messages feed */}
+            <div className="flex-1 overflow-y-auto space-y-1 py-1 pr-1 flex flex-col-reverse hide-scrollbar">
+              {chatMsgs.slice(-4).map((msg, idx) => (
+                <div key={idx} className="text-[10px] leading-tight flex items-start gap-1">
+                  <span className="font-bold text-[color:var(--brand-cyan)] shrink-0 truncate max-w-[70px]">
+                    {msg.sender}:
+                  </span>
+                  <span className="text-white/90 truncate flex-1">{msg.text}</span>
+                </div>
+              ))}
+              {chatMsgs.length === 0 && (
+                <div className="text-[10px] text-white/40 italic py-1 group-hover:text-white/70 transition-colors">
+                  Toca aquí para escribir en el chat...
+                </div>
+              )}
+            </div>
+
+            {/* Quick response chips at bottom */}
+            <div className="flex items-center gap-1 pt-1 overflow-x-auto hide-scrollbar shrink-0">
+              {["¡Buenas!", "¡Listo!", "¡Ok!", "¡Corre!"].map((txt) => (
+                <button 
+                  key={txt} 
+                  onClick={(e) => { e.stopPropagation(); sendChat(txt); }} 
+                  className="px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-[9px] font-bold text-white/90 border border-white/10 whitespace-nowrap transition"
+                >
+                  {txt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* BARAJA A VOCEAR (ARRIBA A LA DERECHA - SOLO LA CARTA CUADRADA) */}
+          <div className="w-[84px] sm:w-[94px] h-[116px] shrink-0 bg-gradient-to-b from-[#1d123d] via-[#120a2a] to-[#0a0518] border-2 border-amber-400 p-1 flex items-center justify-center shadow-[0_4px_20px_rgba(245,158,11,0.25)] relative backdrop-blur-md">
+            {drawn ? (
+              <div className="relative w-full h-full overflow-hidden border border-amber-400/80 shadow-md">
+                <img 
+                  src={drawn.image} 
+                  alt={drawn.name} 
+                  decoding="async"
+                  onError={(e) => {
+                    if (drawn.fallbackImage && e.currentTarget.src !== drawn.fallbackImage) {
+                      e.currentTarget.src = drawn.fallbackImage;
+                    }
+                  }}
+                  className="w-full h-full object-fill animate-pop-in" 
+                />
+                {drawn.mascot && (
+                  <span className="absolute top-0.5 right-0.5 px-1.5 py-0.5 rounded-full bg-black/75 border border-white/20 text-[10px] shadow-md z-10 animate-pop-in">
+                    {drawn.mascot}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="relative w-full h-full bg-gradient-to-br from-red-700 to-red-900 border border-amber-400/50 flex flex-col items-center justify-center p-1 text-center shadow-md">
+                <span className="text-2xl leading-none mb-1">🎴</span>
+                <span className="text-[8px] font-black uppercase text-white/80 leading-tight">
+                  {mesa?.status === "en-juego" ? "Preparando" : "En espera"}
+                </span>
+              </div>
             )}
           </div>
-        </div>
+        </section>
 
         {/* MAIN GAME BOARD */}
-        <main className="flex-1 relative p-4 pt-4 pb-32 flex justify-center items-start overflow-y-auto z-10 w-full">
-           <div className="w-full h-full flex flex-col items-center">
-             
-             {/* DECK CARD (Now inline, no longer overlaps) */}
-             <div className="mb-6 flex flex-col items-center">
-               <span className="text-[10px] text-white/50 font-bold uppercase tracking-widest mb-2">Carta actual</span>
-               <div className="w-[80px] h-[120px] bg-white/10 p-1 shadow-2xl border border-[color:var(--brand-gold)] transform rotate-2 backdrop-blur-md rounded-lg relative">
-                 <div className="w-full h-full relative">
-                   {drawn ? (
-                     <img src={drawn.image} alt={drawn.name} className="w-full h-full object-fill animate-pop-in rounded-sm" />
-                   ) : (
-                     <div className="w-full h-full bg-red-600 border border-red-800 flex flex-col items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')] rounded-sm"></div>
-                   )}
+        <main className="flex-1 relative px-2 py-1.5 pb-6 flex flex-col justify-start items-center z-10 w-full scroll-touch-y">
+           
+           {/* Pagination Header (Only if more than 4 tables) */}
+           {pages.length > 1 && (
+             <div className="w-full max-w-[800px] flex items-center justify-between px-3 py-1.5 mb-2 rounded-full bg-black/40 border border-white/10 text-xs font-bold text-white shrink-0 shadow-md backdrop-blur-md">
+               <button
+                 type="button"
+                 onClick={() => scrollToPage(Math.max(0, activePageIndex - 1))}
+                 disabled={activePageIndex === 0}
+                 className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 disabled:opacity-20 disabled:pointer-events-none transition flex items-center gap-1 text-[11px] text-amber-300 font-extrabold"
+               >
+                 <ChevronLeft className="w-3.5 h-3.5" />
+                 <span>Anteriores</span>
+               </button>
+
+               <div className="flex items-center gap-2">
+                 <span className="text-[10px] text-white/90 font-black tracking-wider uppercase">
+                   Tablas {activePageIndex * TABLAS_PER_PAGE + 1} - {Math.min((activePageIndex + 1) * TABLAS_PER_PAGE, tablasActivas.length)} de {tablasActivas.length}
+                 </span>
+                 <div className="flex items-center gap-1.5">
+                   {pages.map((_, pIdx) => (
+                     <button
+                       key={pIdx}
+                       type="button"
+                       onClick={() => scrollToPage(pIdx)}
+                       aria-label={`Ir a página ${pIdx + 1}`}
+                       className={`transition-all rounded-full ${
+                         activePageIndex === pIdx
+                           ? "w-4 h-1.5 bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.7)]"
+                           : "w-1.5 h-1.5 bg-white/30 hover:bg-white/60"
+                       }`}
+                     />
+                   ))}
                  </div>
                </div>
-             </div>
-             <div className={`grid gap-2 w-full max-w-[800px] h-fit place-items-center mx-auto ${
-               tablasActivas.length === 1 ? 'grid-cols-1 max-w-[360px]' :
-               'grid-cols-2'
-             }`}>
-               {tablasActivas.map(tablaItem => (
-                 <div key={tablaItem.id} className="bg-white/10 p-1.5 sm:p-2 shadow-2xl backdrop-blur-md w-full max-w-[360px] h-fit border border-white/20 relative">
-                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[color:var(--brand-navy-deep)] px-3 py-0.5 rounded-full border border-[color:var(--brand-cyan)]/30 text-[10px] text-[color:var(--brand-cyan)] font-bold tracking-widest shadow-md">
-                     TABLA {tablaItem.id.slice(0, 4).toUpperCase()}
-                   </div>
-                   <div className="grid gap-[2px] bg-white/20 border-2 border-white/10 mt-1" style={{ gridTemplateColumns: `repeat(${tablaItem.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}>
-                     {tablaItem.cards.map((c, idx) => {
-                       const card = getCard(c);
-                       const isMarked = marked.has(`${tablaItem.id}-${c}`);
-                       // to uniquely identify the interaction, use tablaItem.id + c
-                       const uid = `${tablaItem.id}-${c}-${idx}`;
-                       return (
-                         <button 
-                           key={uid} 
-                           type="button" 
-                           onPointerDown={(e) => handlePointerDown(e, tablaItem.id, c)}
-                           onPointerMove={(e) => handlePointerMove(e, tablaItem.id, c)}
-                           onPointerUp={(e) => handlePointerUp(e, tablaItem.id, c)}
-                           onPointerCancel={(e) => handlePointerUp(e, tablaItem.id, c)}
-                           className="relative aspect-[1/1.55] bg-white w-full overflow-hidden active:scale-95 transition-transform touch-none select-none"
-                         >
-                           <img src={card?.image} alt={card?.name ?? `Carta ${c}`} className="w-full h-full object-fill pointer-events-none" draggable={false} />
-                           {isMarked && (
-                             <span className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 backdrop-blur-[1px] pointer-events-none">
-                               <img src={settings.marker} alt="Frijol" className="w-10 h-10 object-contain drop-shadow-lg animate-pop-in" draggable={false} />
-                             </span>
-                           )}
 
-                           {/* Scratching Ritual Visual */}
-                           {interaction?.uid === `${tablaItem.id}-${c}` && interaction.isScratching && (
-                             <div 
-                               className="absolute z-20 pointer-events-none drop-shadow-2xl flex flex-col items-center justify-center animate-scratch-hand"
-                               style={{ left: interaction.curX, top: interaction.curY }}
-                             >
-                                <div className="relative flex items-center justify-center">
-                                   <CoinAnimation className="w-12 h-12 drop-shadow-lg z-10" />
-                                   <span className="text-[40px] absolute top-3 left-4 z-20 drop-shadow-[0_4px_4px_rgba(0,0,0,0.3)]">🤏🏽</span>
-                                </div>
-                             </div>
-                           )}
-                         </button>
-                       );
-                     })}
-                   </div>
-                 </div>
-               ))}
+               <button
+                 type="button"
+                 onClick={() => scrollToPage(Math.min(pages.length - 1, activePageIndex + 1))}
+                 disabled={activePageIndex === pages.length - 1}
+                 className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 disabled:opacity-20 disabled:pointer-events-none transition flex items-center gap-1 text-[11px] text-amber-300 font-extrabold"
+               >
+                 <span>Siguientes</span>
+                 <ChevronRight className="w-3.5 h-3.5" />
+               </button>
              </div>
+           )}
+
+           {/* Swipeable / Slideable Pages Container */}
+           <div
+             ref={boardsSliderRef}
+             onScroll={handleBoardsScroll}
+             onTouchStart={handleTouchStart}
+             onTouchEnd={handleTouchEnd}
+             className="flex w-full overflow-x-auto snap-x snap-mandatory hide-scrollbar scroll-touch-x"
+             style={{ scrollSnapType: "x mandatory", scrollbarWidth: "none", msOverflowStyle: "none" }}
+           >
+             {pages.map((pageTablas, pageIndex) => (
+               <div
+                 key={pageIndex}
+                 className="w-full shrink-0 snap-center px-1 flex flex-col items-center justify-start"
+               >
+                 <div
+                   className={`grid gap-2 w-full max-w-[800px] h-fit place-items-center mx-auto ${
+                     pageTablas.length === 1 ? 'grid-cols-1 max-w-[360px]' : 'grid-cols-2'
+                   }`}
+                 >
+                   {pageTablas.map((tablaItem) => (
+                     <div
+                       key={tablaItem.id}
+                       className="bg-white/10 p-1.5 sm:p-2 shadow-2xl backdrop-blur-md w-full max-w-[360px] h-fit border-2 border-white/20 relative"
+                     >
+                       <div
+                         className="grid gap-[2px] bg-white/20 border-2 border-white/10 overflow-hidden mt-0.5"
+                         style={{ gridTemplateColumns: `repeat(${tablaItem.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}
+                       >
+                         {tablaItem.cards.map((c, idx) => {
+                           const card = getThemedCard(c, deckSkin.id);
+                           const isMarked = marked.has(`${tablaItem.id}-${c}`);
+                           const uid = `${tablaItem.id}-${c}-${idx}`;
+                           return (
+                             <button
+                               key={uid}
+                               type="button"
+                               onPointerDown={(e) => handlePointerDown(e, tablaItem.id, c)}
+                               onPointerMove={(e) => handlePointerMove(e, tablaItem.id, c)}
+                               onPointerUp={(e) => handlePointerUp(e, tablaItem.id, c)}
+                               onPointerCancel={(e) => handlePointerUp(e, tablaItem.id, c)}
+                               className="relative aspect-[1/1.55] bg-white w-full overflow-hidden active:scale-95 transition-transform touch-none select-none"
+                             >
+                               <img
+                                 src={card?.image}
+                                 alt={card?.name ?? `Carta ${c}`}
+                                 decoding="async"
+                                 onError={(e) => {
+                                   if (card?.fallbackImage && e.currentTarget.src !== card.fallbackImage) {
+                                     e.currentTarget.src = card.fallbackImage;
+                                   }
+                                 }}
+                                 className="w-full h-full object-fill pointer-events-none"
+                                 draggable={false}
+                               />
+                               {isMarked && (
+                                 <span className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 backdrop-blur-[1px] pointer-events-none">
+                                   {settings.marker.startsWith("/") || settings.marker.startsWith("http") ? (
+                                     <img
+                                       src={settings.marker}
+                                       alt="Marcador"
+                                       className="w-10 h-10 object-contain drop-shadow-lg animate-pop-in"
+                                       draggable={false}
+                                     />
+                                   ) : (
+                                     <span className="text-3xl drop-shadow-lg animate-pop-in select-none">
+                                       {settings.marker}
+                                     </span>
+                                   )}
+                                 </span>
+                               )}
+
+                               {/* Scratching Ritual Visual */}
+                               {interaction?.uid === `${tablaItem.id}-${c}` && interaction.isScratching && (
+                                 <div
+                                   className="absolute z-20 pointer-events-none drop-shadow-2xl flex flex-col items-center justify-center animate-scratch-hand"
+                                   style={{ left: interaction.curX, top: interaction.curY }}
+                                 >
+                                   <div className="relative flex items-center justify-center">
+                                     <CoinAnimation className="w-12 h-12 drop-shadow-lg z-10" />
+                                     <span className="text-[40px] absolute top-3 left-4 z-20 drop-shadow-[0_4px_4px_rgba(0,0,0,0.3)]">
+                                       🤏🏽
+                                     </span>
+                                   </div>
+                                 </div>
+                               )}
+                             </button>
+                           );
+                         })}
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             ))}
            </div>
         </main>
 
@@ -1045,6 +1994,24 @@ function JugarPage() {
             {isHost ? (mesa?.status !== "en-juego" ? "INICIAR" : "Corre y se va corriendo") : "Esperando al anfitrión"}
           </button>
         </div>
+
+        {/* Ad Interstitial Modal (ONLY shown for regular rooms, strictly bypassed for VIP rooms) */}
+        {!mesa?.isVip && (
+          <AdInterstitialModal
+            open={showAd}
+            onFinished={() => {
+              setShowAd(false);
+              if (pendingActionAfterAd) {
+                pendingActionAfterAd();
+                setPendingActionAfterAd(null);
+              }
+            }}
+            onGoVip={() => {
+              setShowAd(false);
+              navigate({ to: "/crear-sala-vip" });
+            }}
+          />
+        )}
 
       </div>
     </BrandBackground>

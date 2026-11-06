@@ -1,10 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { PartyPopper } from "lucide-react";
+import { useState, useEffect } from "react";
+import { PartyPopper, Mail, Crown, ArrowRight, UserCheck } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
 import { BrandLogo } from "@/components/BrandLogo";
 import { BrandTitle } from "@/components/BrandTitle";
 import { NameModal } from "@/components/NameModal";
+import { EmailAuthModal } from "@/components/EmailAuthModal";
+import { LegalNoticeModal, type LegalTab } from "@/components/LegalNoticeModal";
+import { getCurrentUser, type UserAccount } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -21,19 +24,74 @@ export const Route = createFileRoute("/")({
 function LoginPage() {
   const navigate = useNavigate();
   const [askName, setAskName] = useState(false);
+  const [openEmailAuth, setOpenEmailAuth] = useState(false);
+  const [existingUser, setExistingUser] = useState<UserAccount | null>(null);
+  const [legalModalTab, setLegalModalTab] = useState<LegalTab | null>(null);
+
+  useEffect(() => {
+    const user = getCurrentUser();
+    if (user && user.email) {
+      setExistingUser(user);
+    }
+  }, []);
 
   return (
     <BrandBackground>
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-10 pt-24">
-        <div className="mx-auto mb-10 h-64 w-64 animate-pop-in">
-          <BrandLogo size={256} className="drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]" />
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-10 pt-20">
+        <div className="mx-auto mb-6 h-56 w-56 animate-pop-in">
+          <BrandLogo size={224} className="drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]" />
         </div>
         
         <p className="mb-4 text-center text-[15px] leading-relaxed text-white/90 animate-slide-up-soft" style={{ animationDelay: "0.2s" }}>
           Crea tu mesa, invita a tus amigos y que gane el mejor.
         </p>
 
-        <div className="mt-8 flex w-full flex-col gap-3">
+        {/* Existing Session Quick-Resume banner if available */}
+        {existingUser && (
+          <div className="w-full mb-3 p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 border border-amber-400/40 backdrop-blur-md flex items-center justify-between gap-3 animate-fade-in shadow-lg">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0">
+                {existingUser.isVip ? <Crown className="w-5 h-5 fill-current" /> : <UserCheck className="w-5 h-5" />}
+              </div>
+              <div className="truncate text-left">
+                <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                  {existingUser.name}
+                  {existingUser.isVip && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black uppercase">
+                      VIP
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-white/60 truncate">{existingUser.email}</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/menu" })}
+              className="shrink-0 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 text-xs font-bold font-game flex items-center gap-1 shadow active:scale-95 transition"
+            >
+              <span>Continuar</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        <div className="mt-2 flex w-full flex-col gap-3">
+          {/* Iniciar sesión con Correo y Contraseña */}
+          <button
+            type="button"
+            className="group relative flex h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-[15px] font-bold text-slate-950 shadow-[0_10px_25px_-5px_rgba(245,158,11,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-8px_rgba(245,158,11,0.7)] active:scale-[0.98] animate-slide-up-soft"
+            style={{ animationDelay: "0.35s" }}
+            onClick={() => setOpenEmailAuth(true)}
+          >
+            <span aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-12 bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" style={{ animation: "shimmer-x 2.4s ease-in-out infinite" }} />
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-black/10">
+              <Mail className="h-5 w-5 text-slate-950 stroke-[2.5]" />
+            </span>
+            Iniciar sesión con Correo
+          </button>
+
+          {/* Iniciar sesión con Google */}
           <button
             type="button"
             className="group relative flex h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-white text-[15px] font-semibold text-[color:var(--brand-navy-dark)] shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.5)] active:scale-[0.98] animate-slide-up-soft"
@@ -46,6 +104,8 @@ function LoginPage() {
             </span>
             Iniciar sesión con Google
           </button>
+
+          {/* Iniciar sesión con Apple */}
           <button
             type="button"
             className="relative flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-black text-[15px] font-semibold text-white shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.6)] active:scale-[0.98] animate-slide-up-soft"
@@ -57,6 +117,8 @@ function LoginPage() {
             </span>
             Iniciar sesión con Apple
           </button>
+
+          {/* Entrar como invitado */}
           <button
             type="button"
             className="relative flex h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl border border-white/15 bg-white/10 text-[15px] font-semibold text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/15 active:scale-[0.98] animate-slide-up-soft"
@@ -71,14 +133,34 @@ function LoginPage() {
           </button>
         </div>
 
-        <p className="mt-auto pt-10 text-center text-xs text-white/60 animate-slide-up-soft" style={{ animationDelay: "0.85s" }}>
+        <p className="mt-auto pt-8 text-center text-xs text-white/60 animate-slide-up-soft" style={{ animationDelay: "0.85s" }}>
           Al usar la aplicación aceptas nuestros{" "}
-          <span className="underline">Términos de uso</span> y{" "}
-          <span className="underline">Política de privacidad</span>
+          <button
+            type="button"
+            onClick={() => setLegalModalTab("terminos")}
+            className="underline hover:text-white transition font-medium"
+          >
+            Términos de uso
+          </button>{" "}
+          y{" "}
+          <button
+            type="button"
+            onClick={() => setLegalModalTab("privacidad")}
+            className="underline hover:text-white transition font-medium"
+          >
+            Política de privacidad
+          </button>
         </p>
-        <p className="mt-2 text-[11px] text-white/40">Versión 1.0.0</p>
+        <button
+          type="button"
+          onClick={() => setLegalModalTab("copyright")}
+          className="mt-2 text-[11px] text-white/40 hover:text-white/70 transition"
+        >
+          © 2026 Lotería La Garza • Versión 1.0.0
+        </button>
       </main>
 
+      {/* Guest Name Modal */}
       <NameModal
         open={askName}
         onClose={() => setAskName(false)}
@@ -91,6 +173,23 @@ function LoginPage() {
           setAskName(false);
           navigate({ to: "/menu" });
         }}
+      />
+
+      {/* Email and Password Authentication Modal */}
+      <EmailAuthModal
+        open={openEmailAuth}
+        onClose={() => setOpenEmailAuth(false)}
+        onSuccess={(user) => {
+          setOpenEmailAuth(false);
+          navigate({ to: "/menu" });
+        }}
+      />
+
+      {/* Legal & Privacy Notice Modal */}
+      <LegalNoticeModal
+        open={Boolean(legalModalTab)}
+        initialTab={legalModalTab || "privacidad"}
+        onClose={() => setLegalModalTab(null)}
       />
     </BrandBackground>
   );

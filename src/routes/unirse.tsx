@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
-import { ArrowLeft, Users, Coins, Search, Lock, X, AlertCircle } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ArrowLeft, Users, Coins, Search, Lock, X, AlertCircle, LayoutGrid, Crown, Calendar } from "lucide-react";
 import { ref, onValue } from "firebase/database";
 import { database } from "@/lib/firebase";
 import { BrandBackground } from "@/components/BrandBackground";
+import { JoinTableSelectionModal } from "@/components/JoinTableSelectionModal";
 
 export const Route = createFileRoute("/unirse")({
   component: LobbyBrowserPage,
@@ -23,14 +25,23 @@ function LobbyBrowserPage() {
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+  // Table Selection Modal
+  const [pendingJoinMesa, setPendingJoinMesa] = useState<any>(null);
+
   useEffect(() => {
     const mesasRef = ref(database, "mesas");
     const unsubscribe = onValue(mesasRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        // Obtenemos solo las mesas abiertas
+        // Obtenemos salas activas (abiertas, en juego o programadas), ignorando partidas abandonadas
+        const now = Date.now();
         const activeList = Object.values(data)
-          .filter((m: any) => m.status === "abierta")
+          .filter((m: any) => {
+            if (!m || m.status === "terminada") return false;
+            if (m.createdAt && now - m.createdAt > 4 * 3600 * 1000) return false;
+            if (!m.players || Object.keys(m.players).length === 0) return false;
+            return true;
+          })
           .sort((a: any, b: any) => b.createdAt - a.createdAt);
         setMesas(activeList);
       } else {
@@ -65,7 +76,8 @@ function LobbyBrowserPage() {
       setPasswordInput("");
       setPasswordError("");
     } else {
-      navigate({ to: "/mesa/$id", params: { id: mesa.id } });
+      // Abre modal para elegir cantidad y tablas antes de entrar
+      setPendingJoinMesa(mesa);
     }
   }
 
@@ -74,7 +86,9 @@ function LobbyBrowserPage() {
     if (!selectedMesa) return;
     
     if (passwordInput === selectedMesa.password) {
-      navigate({ to: "/mesa/$id", params: { id: selectedMesa.id } });
+      const target = selectedMesa;
+      setSelectedMesa(null);
+      setPendingJoinMesa(target);
     } else {
       setPasswordError("Contraseña incorrecta");
     }
@@ -136,6 +150,8 @@ function LobbyBrowserPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-slide-up-soft">
               {filteredMesas.map((m) => {
                 const playersCount = m.players ? Object.keys(m.players).length : 0;
+                const isGameInProgress = m.status === "en-juego";
+
                 return (
                   <button
                     key={m.id}
@@ -146,10 +162,11 @@ function LobbyBrowserPage() {
                     <div className="flex items-start justify-between gap-2 w-full relative z-10">
                       <span className="text-lg font-bold text-white leading-tight truncate flex items-center gap-2">
                         {m.name} 
-                        {m.locked && <Lock className="w-4 h-4 text-[color:var(--brand-gold)]" />}
+                        {m.isVip && <Crown className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />}
+                        {m.locked && <Lock className="w-4 h-4 text-[color:var(--brand-gold)] shrink-0" />}
                       </span>
                       <span className="flex items-center gap-1 rounded-full bg-[color:var(--brand-cyan)]/20 px-2 py-1 text-[10px] font-bold text-[color:var(--brand-cyan)] shrink-0">
-                        <Users className="size-3" /> {playersCount}/4
+                        <Users className="size-3" /> {playersCount}/{m.maxPlayers || 4}
                       </span>
                     </div>
                     
@@ -160,17 +177,41 @@ function LobbyBrowserPage() {
                       </span>
                       <span>Modo: <strong className="text-white/90">{m.mode === "normal" ? "Normal" : "Pozo"}</strong> ({m.size})</span>
                     </div>
+
+                    {/* Badge de Límite de Tablas y Estatus */}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1 relative z-10">
+                      <span className="flex items-center gap-1 rounded-full bg-amber-400/15 border border-amber-400/30 px-2.5 py-0.5 text-[11px] font-black text-amber-300 shadow-sm">
+                        <LayoutGrid className="size-3" /> Límite: {m.perPlayer || 2} {m.perPlayer === 1 ? "tabla" : "tablas"}
+                      </span>
+                      {m.status === "programada" ? (
+                        <span className="flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-400/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                          <Calendar className="size-3 text-amber-400" /> {m.scheduledDate ? `${m.scheduledDate} ${m.scheduledTime || ""}` : "Programada"}
+                        </span>
+                      ) : isGameInProgress ? (
+                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                          <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /> En juego
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 rounded-full bg-cyan-500/15 border border-cyan-500/25 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+                          <span className="size-1.5 rounded-full bg-cyan-400" /> En espera
+                        </span>
+                      )}
+                    </div>
                     
-                    <div className="mt-3 flex items-center justify-between w-full pt-3 border-t border-white/10 relative z-10">
+                    <div className="mt-2 flex items-center justify-between w-full pt-2.5 border-t border-white/10 relative z-10">
                       <span className="flex items-center gap-1.5 text-sm font-bold text-[color:var(--brand-gold)]">
                         <Coins className="size-4" /> {m.cost} c/u
                       </span>
                       <span className={`text-xs uppercase font-bold px-4 py-1.5 rounded-full shadow-sm ${
                         m.locked 
                           ? "bg-white/10 text-white/80" 
-                          : "bg-[color:var(--brand-cyan)]/90 text-[color:var(--brand-navy-deep)]"
+                          : m.status === "programada"
+                            ? "bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black shadow-[0_0_10px_rgba(245,158,11,0.3)]"
+                            : isGameInProgress
+                              ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                              : "bg-[color:var(--brand-cyan)]/90 text-[color:var(--brand-navy-deep)] font-black"
                       }`}>
-                        {m.locked ? "Desbloquear" : "Entrar"}
+                        {m.locked ? "Desbloquear" : m.status === "programada" ? "Lobby VIP" : isGameInProgress ? "Espectar / Unirse" : "Elegir tablas"}
                       </span>
                     </div>
                   </button>
@@ -183,20 +224,34 @@ function LobbyBrowserPage() {
                 <Search className="w-8 h-8 text-white/30" />
               </div>
               <h3 className="text-lg font-bold text-white mb-2">No se encontraron mesas</h3>
-              <p className="text-sm text-white/50 mb-6">
-                No hay mesas disponibles que coincidan con tu búsqueda o filtros.
+              <p className="text-sm text-white/50 mb-6 max-w-xs">
+                No hay mesas activas en este momento. ¡Sé el primero en iniciar una partida!
               </p>
+              <button
+                onClick={() => navigate({ to: "/abrir-mesa" })}
+                className="py-3 px-6 rounded-2xl bg-gradient-to-r from-[color:var(--brand-cyan)] to-blue-600 text-white font-bold text-sm active:scale-95 transition shadow-lg"
+              >
+                Crear una mesa ahora
+              </button>
             </div>
           )}
         </main>
 
         {/* Password Modal */}
-        {selectedMesa && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 ring-1 ring-white/10 shadow-2xl animate-pop-in border border-white/20 relative">
+        {selectedMesa && typeof document !== "undefined" && createPortal(
+          <div 
+            onClick={() => setSelectedMesa(null)}
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-fade-in"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 ring-1 ring-white/10 shadow-2xl animate-pop-in border border-white/20 relative"
+            >
               <button 
+                type="button"
                 onClick={() => setSelectedMesa(null)}
-                className="absolute top-4 right-4 p-2 text-white/50 hover:text-white transition active:scale-95"
+                className="absolute top-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition active:scale-95 touch-manipulation cursor-pointer"
+                aria-label="Cerrar modal"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -228,14 +283,22 @@ function LobbyBrowserPage() {
                 <button
                   type="submit"
                   disabled={passwordInput.trim().length === 0}
-                  className="w-full bg-[color:var(--brand-gold)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-[0_5px_15px_rgba(255,215,0,0.3)] disabled:opacity-50 disabled:pointer-events-none mt-2"
+                  className="w-full bg-[color:var(--brand-gold)] text-[color:var(--brand-navy-deep)] font-black py-4 rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-[0_5px_15px_rgba(255,215,0,0.3)] disabled:opacity-50 disabled:pointer-events-none mt-2 touch-manipulation cursor-pointer"
                 >
                   Entrar a la mesa
                 </button>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
+
+        {/* Modal de Selección de Tablas antes de unirse */}
+        <JoinTableSelectionModal
+          open={Boolean(pendingJoinMesa)}
+          mesa={pendingJoinMesa}
+          onClose={() => setPendingJoinMesa(null)}
+        />
       </div>
     </BrandBackground>
   );

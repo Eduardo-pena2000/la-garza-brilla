@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { FloatingMatchCountdown } from "@/components/FloatingMatchCountdown";
 
 import appCss from "../styles.css?url";
 
@@ -113,10 +114,11 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   useEffect(() => {
-    // Clear all local storage when the app starts so it always behaves like a fresh install
-    // for client testing purposes (tutorial shown, no saved tables, no saved name)
+    // Only clear storage if explicitly requested via query param ?reset=1
     try {
-      localStorage.clear();
+      if (typeof window !== "undefined" && window.location.search.includes("reset=1")) {
+        localStorage.clear();
+      }
     } catch {
       /* ignore */
     }
@@ -126,6 +128,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <FloatingMatchCountdown />
     </QueryClientProvider>
   );
 }

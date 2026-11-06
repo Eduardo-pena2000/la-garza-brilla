@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DECK, getCard } from "@/lib/deck";
-import { Plus, Trash2, CheckCircle, RefreshCcw, LayoutGrid, X, Pencil, ArrowLeft, Sparkles, Pointer } from "lucide-react";
+import { getThemedCard, getEquippedDeckSkin } from "@/lib/deckSkins";
+import { Plus, Trash2, CheckCircle, RefreshCcw, LayoutGrid, X, Pencil, ArrowLeft, Sparkles, Pointer, ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
 
 type Size = "4x4" | "5x5";
@@ -48,11 +49,15 @@ export function TablasView({ onBack, navigateToMenu }: { onBack?: () => void, na
   const [selected, setSelected] = useState<string | null>(null);
   const [creationMode, setCreationMode] = useState<"none" | "choose" | "custom">("none");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deckSkin, setDeckSkin] = useState(() => getEquippedDeckSkin());
 
   const isTutorial = tablas.length === 0;
 
   useEffect(() => {
     setTablas(loadTablas());
+    const handleDeckUpdate = () => setDeckSkin(getEquippedDeckSkin());
+    window.addEventListener("garza:deck-updated", handleDeckUpdate);
+    return () => window.removeEventListener("garza:deck-updated", handleDeckUpdate);
   }, []);
 
   const filtered = useMemo(
@@ -96,9 +101,9 @@ export function TablasView({ onBack, navigateToMenu }: { onBack?: () => void, na
   const selectedTabla = tablas.find((t) => t.id === selected) ?? null;
 
   return (
-    <div className="flex flex-col h-full font-sans relative overflow-x-hidden overflow-y-auto text-white pt-5">
+    <div className="flex flex-col h-full font-sans relative overflow-x-hidden text-white pt-5 pb-36 scroll-touch-y">
       {isTutorial && (
-        <div className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-sm pointer-events-auto transition-all duration-500" />
+        <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm pointer-events-none transition-all duration-500" />
       )}
 
       {/* Header */}
@@ -132,7 +137,7 @@ export function TablasView({ onBack, navigateToMenu }: { onBack?: () => void, na
         </button>
       </header>
 
-      <main className="relative mx-auto w-full max-w-md px-4 pb-28 pt-5">
+      <main className="relative z-40 mx-auto w-full max-w-md px-4 pb-8 pt-5">
         {/* Hint */}
         <div className={`mt-4 flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-xs text-white/85 ring-1 ring-white/15 backdrop-blur animate-slide-up-soft ${isTutorial ? "opacity-30 pointer-events-none" : ""}`}>
           <Sparkles className="h-4 w-4 text-[color:var(--brand-cyan)]" />
@@ -195,29 +200,73 @@ export function TablasView({ onBack, navigateToMenu }: { onBack?: () => void, na
       )}
 
       {/* Creation Mode Chooser */}
-      {creationMode === "choose" && (
-        <div className={`fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-pop-in z-[60]`}>
-          <div className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-white/10 flex flex-col gap-4 relative">
+      {creationMode === "choose" && typeof document !== "undefined" && createPortal(
+        <div 
+          onClick={() => setCreationMode("none")}
+          className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md px-4 animate-fade-in z-[100]"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[color:var(--brand-navy-deep)] w-full max-w-sm rounded-3xl p-6 shadow-2xl border-2 border-white/20 flex flex-col gap-4 relative animate-pop-in"
+          >
             {isTutorial && (
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 animate-bounce flex flex-col items-center gap-1">
-                <div className="bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] text-[11px] font-black uppercase px-3 py-1 rounded-full shadow-lg whitespace-nowrap">¡Elige una opción!</div>
+              <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 animate-bounce flex flex-col items-center gap-1 pointer-events-none">
+                <div className="bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] text-[11px] font-black uppercase px-3.5 py-1 rounded-full shadow-lg whitespace-nowrap">
+                  ¡Elige una opción!
+                </div>
                 <Pointer className="w-8 h-8 text-[color:var(--brand-cyan)] drop-shadow-[0_0_8px_rgba(0,255,255,0.8)] rotate-180" />
               </div>
             )}
-            <h3 className="text-xl font-bold text-center text-white mb-2">Crear nueva tabla</h3>
-            <button onClick={() => { addTabla(); setCreationMode("none"); }} className="w-full py-4 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white font-bold flex flex-col items-center gap-1 border border-white/10">
-              <Sparkles className="w-6 h-6 text-[color:var(--brand-cyan)]" />
-              Generar aleatoria
+            <div className="text-center">
+              <h3 className="text-xl font-black text-white">Crear nueva tabla</h3>
+              <p className="text-xs text-white/60 mt-1">Elige cómo quieres armar tu tabla de 4x4</p>
+            </div>
+
+            <button 
+              type="button"
+              onClick={() => { addTabla(); setCreationMode("none"); }} 
+              className="w-full py-4 px-4 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white font-black text-sm flex items-center justify-between border border-white/10 touch-manipulation cursor-pointer group shadow-md"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[color:var(--brand-cyan)]/20 text-[color:var(--brand-cyan)] flex items-center justify-center border border-[color:var(--brand-cyan)]/30">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-bold text-white">Generar aleatoria</div>
+                  <div className="text-[11px] text-white/50 font-normal">Recomendado para empezar ya</div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-white/40 group-hover:text-white transition" />
             </button>
-            <button onClick={() => setCreationMode("custom")} className="w-full py-4 rounded-xl hover:opacity-90 active:scale-95 transition-all text-[color:var(--brand-navy-deep)] font-bold flex flex-col items-center gap-1 shadow-lg" style={{ background: "var(--gradient-card-gold)" }}>
-              <LayoutGrid className="w-6 h-6" />
-              Crear personalizada
+
+            <button 
+              type="button"
+              onClick={() => setCreationMode("custom")} 
+              className="w-full py-4 px-4 rounded-2xl active:scale-95 transition-all text-[color:var(--brand-navy-deep)] font-black text-sm flex items-center justify-between shadow-lg touch-manipulation cursor-pointer group"
+              style={{ background: "var(--gradient-card-gold)" }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-black/15 text-[color:var(--brand-navy-deep)] flex items-center justify-center">
+                  <LayoutGrid className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-black text-[color:var(--brand-navy-deep)]">Crear personalizada</div>
+                  <div className="text-[11px] text-[color:var(--brand-navy-deep)]/70 font-bold">Escoge tus 16 cartas favoritas</div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-[color:var(--brand-navy-deep)]/60 group-hover:text-[color:var(--brand-navy-deep)] transition" />
             </button>
-            {!isTutorial && (
-              <button onClick={() => setCreationMode("none")} className="mt-2 text-white/50 text-sm font-bold p-2">Cancelar</button>
-            )}
+
+            <button 
+              type="button"
+              onClick={() => setCreationMode("none")} 
+              className="w-full py-2.5 text-white/50 hover:text-white text-xs font-bold transition text-center touch-manipulation cursor-pointer"
+            >
+              Cancelar
+            </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {creationMode === "custom" && (
@@ -257,13 +306,18 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
 }
 
 function CardTile({ n }: { n: number }) {
-  const card = getCard(n);
+  const card = getThemedCard(n);
   return (
-    <div className="relative aspect-[1/1.55]">
+    <div className="relative aspect-[1/1.55] bg-amber-50 rounded-[2px] overflow-hidden">
       <img
         src={card?.image}
         alt={card?.name ?? `Carta ${n}`}
-        loading="lazy"
+        decoding="async"
+        onError={(e) => {
+          if (card?.fallbackImage && e.currentTarget.src !== card.fallbackImage) {
+            e.currentTarget.src = card.fallbackImage;
+          }
+        }}
         className="h-full w-full object-fill drop-shadow-sm"
       />
     </div>
@@ -272,32 +326,37 @@ function CardTile({ n }: { n: number }) {
 
 function EmptyState({ onAdd, isTutorial = false }: { onAdd: () => void; isTutorial?: boolean }) {
   return (
-    <div className={`mt-10 flex flex-col items-center rounded-3xl px-6 py-10 text-center ring-1 ring-white/10 animate-slide-up-soft ${isTutorial ? "z-[70] relative bg-[color:var(--brand-navy)]/80 ring-2 ring-[color:var(--brand-cyan)] shadow-[0_0_30px_rgba(0,255,255,0.2)]" : "bg-white/5 backdrop-blur"}`}>
+    <div className={`mt-8 flex flex-col items-center rounded-3xl px-6 py-10 text-center ring-1 ring-white/10 animate-slide-up-soft relative z-50 ${isTutorial ? "bg-[color:var(--brand-navy)] ring-2 ring-[color:var(--brand-cyan)] shadow-[0_0_35px_rgba(0,255,255,0.35)]" : "bg-white/5 backdrop-blur"}`}>
+      {isTutorial && (
+        <div className="mb-4 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[color:var(--brand-cyan)]/20 border border-[color:var(--brand-cyan)]/40 text-[color:var(--brand-cyan)] text-xs font-black uppercase tracking-wider animate-pulse">
+          <Sparkles className="w-3.5 h-3.5" /> Paso 1: Tu primera baraja
+        </div>
+      )}
       <div
         className="mb-4 grid h-16 w-16 place-items-center rounded-2xl text-white shadow-lg"
         style={{ background: "var(--gradient-brand)" }}
       >
         <LayoutGrid className="h-7 w-7" />
       </div>
-      <h3 className="text-lg font-bold">{isTutorial ? "¡Bienvenido a Lotería La Garza!" : "Aún no tienes tablas"}</h3>
-      <p className="mt-1 text-sm text-white/70">
-        {isTutorial ? "Para comenzar a jugar, necesitas crear tu primera baraja." : "Crea tu primera tabla y comienza a jugar cuando quieras."}
+      <h3 className="text-xl font-black text-white">{isTutorial ? "¡Bienvenido a Lotería La Garza!" : "Aún no tienes tablas"}</h3>
+      <p className="mt-2 text-xs text-white/70 max-w-xs leading-relaxed">
+        {isTutorial ? "Para comenzar a jugar, necesitas crear tu primera baraja. Elige cómo quieres armarla:" : "Crea tu primera tabla y comienza a jugar cuando quieras."}
       </p>
       
-      <div className="relative mt-5">
+      <div className="relative mt-6">
         {isTutorial && (
-          <div className="absolute -left-12 top-1/2 -translate-y-1/2 z-50 animate-bounce-slow flex flex-col items-center gap-1">
-            <div className="bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] text-[10px] font-black uppercase px-2 py-1 rounded-full shadow-lg whitespace-nowrap">Crear baraja</div>
-            <Pointer className="w-8 h-8 text-[color:var(--brand-cyan)] drop-shadow-[0_0_8px_rgba(0,255,255,0.8)] rotate-90" />
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 animate-bounce flex flex-col items-center gap-1 pointer-events-none">
+            <div className="bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)] text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow-lg whitespace-nowrap">Toca aquí</div>
+            <Pointer className="w-8 h-8 text-[color:var(--brand-cyan)] drop-shadow-[0_0_8px_rgba(0,255,255,0.8)] rotate-180" />
           </div>
         )}
         <button
           type="button"
           onClick={onAdd}
-          className={`flex h-12 items-center gap-2 rounded-full px-6 text-sm font-bold text-white shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 active:scale-[0.98] ${isTutorial ? "ring-2 ring-white ring-offset-2 ring-offset-[color:var(--brand-navy-deep)] shadow-[0_0_20px_rgba(255,255,255,0.4)]" : ""}`}
+          className={`flex h-14 items-center gap-2 rounded-full px-8 text-sm font-black text-white shadow-[0_0_25px_rgba(255,105,180,0.5)] transition hover:scale-105 active:scale-95 touch-manipulation cursor-pointer ${isTutorial ? "ring-4 ring-white/40 ring-offset-2 ring-offset-[color:var(--brand-navy-deep)] shadow-[0_0_30px_rgba(255,255,255,0.5)]" : ""}`}
           style={{ background: "var(--gradient-card-pink)" }}
         >
-          <Plus className="h-4 w-4" /> Crear tabla
+          <Plus className="h-5 w-5 stroke-[3]" /> Crear mi primera tabla
         </button>
       </div>
     </div>
