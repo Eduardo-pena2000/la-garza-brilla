@@ -47,8 +47,8 @@ function LoginPage() {
   return (
     <BrandBackground>
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-10 pt-20">
-        <div className="mx-auto mb-6 h-56 w-56 animate-pop-in">
-          <BrandLogo size={224} className="drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]" />
+        <div className="mx-auto mb-6 flex items-center justify-center animate-pop-in">
+          <BrandLogo size={224} />
         </div>
         
         <p className="mb-4 text-center text-[15px] leading-relaxed text-white/90 animate-slide-up-soft" style={{ animationDelay: "0.2s" }}>

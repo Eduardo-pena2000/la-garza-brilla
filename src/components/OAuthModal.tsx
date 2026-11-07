@@ -179,3 +179,4 @@ export function OAuthModal({ open, provider, onClose, onSuccess }: OAuthModalPro
     </div>
   );
 }
+

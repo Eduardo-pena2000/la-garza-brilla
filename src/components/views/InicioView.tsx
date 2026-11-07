@@ -453,11 +453,11 @@ export function InicioView({
       {/* Logo */}
       <div className="relative mx-auto -mt-6 flex w-36 items-center justify-center z-10 shrink-0">
         <img
-          src="/logo-garza.png?v=2"
+          src="/logo-garza.png?v=3"
           alt="Logo Lotería La Garza"
           width={1920}
           height={1920}
-          className="relative w-36 h-36 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.55)]"
+          className="relative w-36 h-36 object-contain"
         />
       </div>
 
