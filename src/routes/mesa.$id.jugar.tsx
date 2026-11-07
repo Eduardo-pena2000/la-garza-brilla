@@ -17,6 +17,7 @@ import { AdInterstitialModal } from "@/components/AdInterstitialModal";
 import { getEquippedMarker, getOwnedItemIds } from "@/lib/loot";
 import { SPECIAL_STICKERS, SPECIAL_EMOJIS } from "@/lib/chests";
 import { getEquippedDeckSkin, getThemedCard, type ThemedCard } from "@/lib/deckSkins";
+import { getCurrentUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/mesa/$id/jugar")({
   component: JugarPage,
@@ -53,6 +54,7 @@ interface Mesa {
   nextRoundAt?: number;
   isVip?: boolean; isScheduled?: boolean; scheduledDate?: string; scheduledTime?: string;
   rounds?: any[]; currentRound?: number;
+  whitelistOnly?: boolean; registeredPlayers?: { name: string }[];
 }
 interface ChatMsg {
   id: string; text: string; sender: string; timestamp: number;
@@ -165,7 +167,19 @@ function JugarPage() {
   }, [coins]);
 
   const [marked, setMarked] = useState<Set<string>>(new Set());
-  const [paused, setPaused] = useState(true);  const [settings, setSettings] = useState(() => {
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (mesa) {
+      if (mesa.serverPaused !== undefined) {
+        setPaused(mesa.serverPaused);
+      } else if (mesa.status === "en-juego") {
+        setPaused(false);
+      }
+    }
+  }, [mesa?.serverPaused, mesa?.status]);
+
+  const [settings, setSettings] = useState(() => {
     try {
       const eq = getEquippedMarker();
       return {
@@ -252,8 +266,26 @@ function JugarPage() {
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
 
-  const userName = typeof window !== "undefined" ? localStorage.getItem("garza:name") || "Jugador" : "Jugador";
+  // Verificación de identidad: si entra por enlace sin cuenta ni nombre, redirigir a inicio
+  const user = getCurrentUser();
+  const storedName = typeof window !== "undefined" ? localStorage.getItem("garza:name") : null;
+  const hasValidIdentity = Boolean(
+    (user && user.email) ||
+    (storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado")
+  );
+
+  useEffect(() => {
+    if (!hasValidIdentity) {
+      navigate({
+        to: "/",
+        search: { redirect: `/mesa/${id}/jugar` },
+      });
+    }
+  }, [hasValidIdentity, id, navigate]);
+
+  const userName = (user?.name || storedName || "Jugador").trim();
   const isHost = (typeof window !== "undefined" && localStorage.getItem(`garza:host:${id}`) === "true") || mesa?.host === userName;
+  const cardAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Chunk active boards into pages of 4 (e.g. 8 tablas -> Page 1: 4, Page 2: 4)
   const pages = useMemo(() => {
@@ -389,19 +421,21 @@ function JugarPage() {
   const isGameStarted = drawnIdx >= 0;
 
   // Determinar si entra como espectador:
-  // Si la partida ya está en juego (drawnIdx >= 0), y el usuario no estaba registrado previamente como jugador activo
+  // Solo si el usuario explícitamente tiene rol de espectador o si la sala tiene whitelist y no está incluido
   const isSpectator = useMemo(() => {
     if (!mesa) return false;
     const userPlayer = mesa.players?.[userName];
     if (userPlayer?.role === "spectator" || (userPlayer?.status as string) === "spectator") {
       return true;
     }
-    const hadSession = Boolean(userPlayer);
-    if (!hadSession && mesa.status === "en-juego" && drawnIdx >= 0 && !isHost) {
-      return true;
+    if (mesa.whitelistOnly && mesa.registeredPlayers && !isHost) {
+      const allowed = mesa.registeredPlayers.some(
+        (p) => p.name.trim().toLowerCase() === userName.trim().toLowerCase()
+      );
+      if (!allowed) return true;
     }
     return false;
-  }, [mesa, userName, drawnIdx, isHost]);
+  }, [mesa, userName, isHost]);
 
   // Keep-alive presence & bot registration: si el jugador se desconecta, el bot toma el control
   useEffect(() => {
@@ -483,14 +517,52 @@ function JugarPage() {
     }
   }, [isCaller, drawnIdx, mesa?.status, mesa?.serverPaused, mesa?.mode, mesa?.winner, id]);
 
+  // Desbloqueo del contexto de audio en Safari/iOS en la primera interacción táctil
+  useEffect(() => {
+    const unlock = () => {
+      if (!cardAudioRef.current) {
+        cardAudioRef.current = new Audio();
+      }
+      cardAudioRef.current.load();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    window.addEventListener("touchstart", unlock, { once: true, passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+  }, []);
+
+  // Pre-carga anticipada de audios de las próximas 5 cartas para evitar desfase en iOS/móvil
+  useEffect(() => {
+    if (!deck || deck.length === 0 || !settings.audio) return;
+    const start = Math.max(0, drawnIdx);
+    const nextBatch = deck.slice(start, start + 5);
+    const basePath = settings.voice === "default" ? "/audio/cards" : `/audio/cards/${settings.voice}`;
+    nextBatch.forEach((c) => {
+      const pre = new Audio();
+      pre.preload = "auto";
+      pre.src = `${basePath}/b${c}.mp3`;
+    });
+  }, [deck, drawnIdx, settings.audio, settings.voice]);
+
+  // Reproducción de audio optimizada usando elemento persistente
   const currentCard = deck[drawnIdx];
   useEffect(() => {
-    if (currentCard !== undefined && settings.audio) {
+    if (currentCard !== undefined && settings.audio && drawnIdx >= 0) {
       const basePath = settings.voice === "default" ? "/audio/cards" : `/audio/cards/${settings.voice}`;
-      const audio = new Audio(`${basePath}/b${currentCard}.mp3`);
+      if (!cardAudioRef.current) {
+        cardAudioRef.current = new Audio();
+      }
+      const audio = cardAudioRef.current;
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = `${basePath}/b${currentCard}.mp3`;
       audio.play().catch(() => {});
     }
-  }, [currentCard, settings.audio, settings.voice]);
+  }, [currentCard, drawnIdx, settings.audio, settings.voice]);
 
   const drawn = drawnIdx >= 0 ? getThemedCard(deck[drawnIdx], deckSkin.id) : null;
 
@@ -1955,47 +2027,75 @@ function JugarPage() {
         </main>
 
         {/* CAMBIAR TABLAS / MODO BUTTONS */}
-        <div className="bg-[color:var(--brand-navy-deep)] py-3 px-4 flex justify-between gap-4 border-t border-white/10 shrink-0 z-30 relative shadow-2xl">
-          <button onClick={() => setActiveModal("tablas")} className="flex-1 py-2.5 rounded-full border-2 border-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 active:bg-white/10 transition-colors">
+        <div className="bg-[color:var(--brand-navy-deep)] py-2.5 px-4 flex justify-between gap-3 border-t border-white/10 shrink-0 z-30 relative shadow-2xl">
+          <button
+            type="button"
+            onClick={() => setActiveModal("tablas")}
+            className="flex-1 py-2.5 rounded-full border-2 border-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 active:bg-white/10 transition-colors"
+          >
             <RotateCcw className="w-4 h-4" strokeWidth={2.5} /> Cambiar Tablas
           </button>
-          <button onClick={() => setActiveModal("modos")} className="flex-1 py-2.5 rounded-full border-2 border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)] font-bold text-sm flex items-center justify-center gap-2 active:bg-[color:var(--brand-cyan)]/10 transition-colors">
-            <Triangle className="w-4 h-4 rotate-90" strokeWidth={2.5} /> Cambiar Modo
-          </button>
-        </div>
-
-        {/* MAIN BOTTOM BAR */}
-        <div className="bg-[color:var(--brand-navy)] px-4 py-3 flex items-center gap-3 shrink-0 z-30 border-t border-white/10 relative shadow-inner">
-          <div className="flex items-center gap-1.5 bg-white/10 px-3 py-2.5 rounded-full border border-white/20 shadow-sm shrink-0">
-            <TimerIcon className="w-4 h-4 text-white/80" />
-            <span className="font-extrabold text-sm text-white">{timeSecs}s</span>
-          </div>
-          
-          {isHost ? (
-            <button onClick={() => setPaused(!paused)} className="bg-[color:var(--brand-cyan)] w-[42px] h-[42px] shrink-0 rounded-full flex items-center justify-center shadow-inner border border-[color:var(--brand-cyan)] active:scale-95 transition-transform">
-              {paused ? <Play className="w-5 h-5 text-[color:var(--brand-navy-deep)] fill-[color:var(--brand-navy-deep)] ml-1" /> : <Pause className="w-5 h-5 text-[color:var(--brand-navy-deep)] fill-[color:var(--brand-navy-deep)]" />}
+          {isHost && (
+            <button
+              type="button"
+              onClick={() => setActiveModal("modos")}
+              className="flex-1 py-2.5 rounded-full border-2 border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)] font-bold text-sm flex items-center justify-center gap-2 active:bg-[color:var(--brand-cyan)]/10 transition-colors"
+            >
+              <Triangle className="w-4 h-4 rotate-90" strokeWidth={2.5} /> Cambiar Modo
             </button>
-          ) : (
-             <div className="bg-white/5 w-[42px] h-[42px] shrink-0 rounded-full flex items-center justify-center border border-white/10 opacity-50">
-              <Play className="w-5 h-5 text-white/40 fill-white/40 ml-1" />
-            </div>
           )}
-
-          <button 
-            onClick={() => {
-              if (isHost && drawnIdx < 0) {
-                 update(ref(database, `mesas/${id}`), { status: "en-juego", serverPaused: false }).catch(() => {});
-                 setPaused(false);
-              }
-            }}
-            disabled={!isHost || mesa?.status === "en-juego"}
-            className={`flex-1 text-[color:var(--brand-navy-deep)] font-extrabold py-3 rounded-full shadow-md text-sm sm:text-base tracking-wide transition-transform ${
-              !isHost || mesa?.status === "en-juego" ? "bg-white/20 text-white/50 cursor-not-allowed" : "bg-[color:var(--brand-gold)] shadow-[0_0_15px_rgba(255,215,0,0.4)] active:scale-95"
-            }`}
-          >
-            {isHost ? (mesa?.status !== "en-juego" ? "INICIAR" : "Corre y se va corriendo") : "Esperando al anfitrión"}
-          </button>
         </div>
+
+        {/* MAIN BOTTOM BAR — SOLO VISIBLE PARA EL HOST */}
+        {isHost && (
+          <div className="bg-[color:var(--brand-navy)] px-4 py-3 flex items-center gap-3 shrink-0 z-30 border-t border-white/10 relative shadow-inner">
+            <div className="flex items-center gap-1.5 bg-white/10 px-3 py-2.5 rounded-full border border-white/20 shadow-sm shrink-0">
+              <TimerIcon className="w-4 h-4 text-white/80" />
+              <span className="font-extrabold text-sm text-white">{timeSecs}s</span>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => {
+                const nextPaused = !paused;
+                setPaused(nextPaused);
+                update(ref(database, `mesas/${id}`), { serverPaused: nextPaused }).catch(() => {});
+              }}
+              className="bg-[color:var(--brand-cyan)] w-[42px] h-[42px] shrink-0 rounded-full flex items-center justify-center shadow-inner border border-[color:var(--brand-cyan)] active:scale-95 transition-transform cursor-pointer"
+              title={paused ? "Reanudar" : "Pausar"}
+            >
+              {paused ? (
+                <Play className="w-5 h-5 text-[color:var(--brand-navy-deep)] fill-[color:var(--brand-navy-deep)] ml-1" />
+              ) : (
+                <Pause className="w-5 h-5 text-[color:var(--brand-navy-deep)] fill-[color:var(--brand-navy-deep)]" />
+              )}
+            </button>
+
+            <button 
+              type="button"
+              onClick={() => {
+                if (isHost && drawnIdx < 0) {
+                  const newDeck = mesa?.deck && mesa.deck.length > 0 ? mesa.deck : shuffle(DECK.map((c) => c.n));
+                  update(ref(database, `mesas/${id}`), {
+                    status: "en-juego",
+                    serverPaused: false,
+                    deck: newDeck,
+                    drawnIdx: 0,
+                  }).catch(() => {});
+                  setPaused(false);
+                }
+              }}
+              disabled={mesa?.status === "en-juego" && drawnIdx >= 0}
+              className={`flex-1 text-[color:var(--brand-navy-deep)] font-extrabold py-3 rounded-full shadow-md text-sm sm:text-base tracking-wide transition-transform ${
+                mesa?.status === "en-juego" && drawnIdx >= 0
+                  ? "bg-white/20 text-white/50 cursor-not-allowed"
+                  : "bg-[color:var(--brand-gold)] shadow-[0_0_15px_rgba(255,215,0,0.4)] active:scale-95 cursor-pointer"
+              }`}
+            >
+              {mesa?.status !== "en-juego" || drawnIdx < 0 ? "INICIAR" : "Corre y se va corriendo"}
+            </button>
+          </div>
+        )}
 
         {/* Ad Interstitial Modal (ONLY shown for regular rooms, strictly bypassed for VIP rooms) */}
         {!mesa?.isVip && (

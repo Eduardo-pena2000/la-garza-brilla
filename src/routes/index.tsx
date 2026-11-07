@@ -10,6 +10,11 @@ import { LegalNoticeModal, type LegalTab } from "@/components/LegalNoticeModal";
 import { getCurrentUser, type UserAccount } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
+    return {
+      redirect: typeof search.redirect === "string" ? search.redirect : undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Lotería La Garza — Iniciar sesión" },
@@ -23,6 +28,9 @@ export const Route = createFileRoute("/")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
+  const redirectTarget = search.redirect;
+
   const [askName, setAskName] = useState(false);
   const [openEmailAuth, setOpenEmailAuth] = useState(false);
   const [existingUser, setExistingUser] = useState<UserAccount | null>(null);
@@ -46,6 +54,18 @@ function LoginPage() {
           Crea tu mesa, invita a tus amigos y que gane el mejor.
         </p>
 
+        {/* Banner de invitación cuando entra por un link de sala */}
+        {redirectTarget && (
+          <div className="w-full mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/25 via-yellow-500/20 to-amber-500/25 border-2 border-amber-400/60 backdrop-blur-md text-center animate-pop-in shadow-[0_0_20px_rgba(245,158,11,0.3)]">
+            <div className="text-[11px] font-black uppercase tracking-widest text-amber-300 mb-0.5">
+              ¡Te han invitado a una partida!
+            </div>
+            <p className="text-xs text-white/95 font-medium leading-snug">
+              Inicia sesión o escribe tu nombre como invitado para unirte de inmediato a la mesa.
+            </p>
+          </div>
+        )}
+
         {/* Existing Session Quick-Resume banner if available */}
         {existingUser && (
           <div className="w-full mb-3 p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 border border-amber-400/40 backdrop-blur-md flex items-center justify-between gap-3 animate-fade-in shadow-lg">
@@ -67,10 +87,16 @@ function LoginPage() {
             </div>
             <button
               type="button"
-              onClick={() => navigate({ to: "/menu" })}
+              onClick={() => {
+                if (redirectTarget) {
+                  window.location.href = redirectTarget;
+                } else {
+                  navigate({ to: "/menu" });
+                }
+              }}
               className="shrink-0 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 text-xs font-bold font-game flex items-center gap-1 shadow active:scale-95 transition"
             >
-              <span>Continuar</span>
+              <span>{redirectTarget ? "Entrar a Sala" : "Continuar"}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -167,11 +193,16 @@ function LoginPage() {
         onSave={(name) => {
           try {
             localStorage.setItem("garza:name", name);
+            window.dispatchEvent(new Event("garza:auth-updated"));
           } catch {
             /* ignore */
           }
           setAskName(false);
-          navigate({ to: "/menu" });
+          if (redirectTarget) {
+            window.location.href = redirectTarget;
+          } else {
+            navigate({ to: "/menu" });
+          }
         }}
       />
 
@@ -179,9 +210,13 @@ function LoginPage() {
       <EmailAuthModal
         open={openEmailAuth}
         onClose={() => setOpenEmailAuth(false)}
-        onSuccess={(user) => {
+        onSuccess={(_user) => {
           setOpenEmailAuth(false);
-          navigate({ to: "/menu" });
+          if (redirectTarget) {
+            window.location.href = redirectTarget;
+          } else {
+            navigate({ to: "/menu" });
+          }
         }}
       />
 

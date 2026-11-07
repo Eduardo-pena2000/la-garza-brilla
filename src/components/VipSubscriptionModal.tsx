@@ -12,6 +12,7 @@ import {
   type PurchaseResult,
 } from "@/lib/purchases";
 import { getCurrentUser, encodeEmailKey } from "@/lib/auth";
+import { EmailAuthModal } from "@/components/EmailAuthModal";
 import type { PurchasesPackage } from "@revenuecat/purchases-capacitor";
 
 interface VipSubscriptionModalProps {
@@ -29,6 +30,7 @@ export function VipSubscriptionModal({ open, onClose, onSuccess }: VipSubscripti
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [vipPackage, setVipPackage] = useState<PurchasesPackage | null>(null);
   const [storePrice, setStorePrice] = useState<string>("$99 MXN / mes");
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -72,6 +74,13 @@ export function VipSubscriptionModal({ open, onClose, onSuccess }: VipSubscripti
   };
 
   const handleSubscribe = async () => {
+    const user = getCurrentUser();
+    if (!user || !user.email) {
+      // Requisito: para comprar VIP se debe iniciar sesión obligatoriamente
+      setShowAuthModal(true);
+      return;
+    }
+
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -370,6 +379,16 @@ export function VipSubscriptionModal({ open, onClose, onSuccess }: VipSubscripti
           )}
         </div>
       </div>
+
+      {/* Modal de autenticación obligatoria si es invitado */}
+      <EmailAuthModal
+        open={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          handleSubscribe();
+        }}
+      />
     </div>,
     document.body
   );

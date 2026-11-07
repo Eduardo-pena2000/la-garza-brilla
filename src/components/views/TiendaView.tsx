@@ -19,6 +19,7 @@ import {
 import { CoinAnimation } from "@/components/CoinAnimation";
 import { VipSubscriptionModal } from "@/components/VipSubscriptionModal";
 import { ChestOpeningModal } from "@/components/ChestOpeningModal";
+import { EmailAuthModal } from "@/components/EmailAuthModal";
 import { Capacitor } from "@capacitor/core";
 import {
   purchaseCoins,
@@ -56,6 +57,8 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
   const [restoring, setRestoring] = useState(false);
   const [iapError, setIapError] = useState<string | null>(null);
   const [iapSuccess, setIapSuccess] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingPackageToBuy, setPendingPackageToBuy] = useState<{ productId: string; pkg?: PurchasesPackage } | null>(null);
 
   // Chest System State
   const [activeChest, setActiveChest] = useState<ChestConfig | null>(null);
@@ -131,6 +134,14 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
   };
 
   const handleBuyCoinsPackage = async (productId: string, pkg?: PurchasesPackage) => {
+    const user = getCurrentUser();
+    if (!user || !user.email) {
+      // Requisito: para comprar monedas se debe iniciar sesión obligatoriamente
+      setPendingPackageToBuy({ productId, pkg });
+      setShowAuthModal(true);
+      return;
+    }
+
     if (buyingPackageId) return; // evitar doble tap
     setBuyingPackageId(productId);
     setIapError(null);
@@ -732,6 +743,15 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
             Monedas
             <span className="h-px w-8 bg-white/20" />
           </h2>
+
+          {!getCurrentUser()?.email && (
+            <div className="mb-3 p-2.5 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-center animate-fade-in">
+              <p className="text-[11px] text-amber-200 font-medium">
+                💡 Inicia sesión con tu cuenta para comprar monedas y guardar tus premios en la nube.
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             {[
               {
@@ -850,6 +870,23 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
         rewards={chestRewards}
         onClose={() => setActiveChest(null)}
         onClaim={handleClaimRewards}
+      />
+
+      {/* Modal de inicio de sesión obligatorio para compras */}
+      <EmailAuthModal
+        open={showAuthModal}
+        onClose={() => {
+          setShowAuthModal(false);
+          setPendingPackageToBuy(null);
+        }}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          if (pendingPackageToBuy) {
+            const { productId, pkg } = pendingPackageToBuy;
+            setPendingPackageToBuy(null);
+            handleBuyCoinsPackage(productId, pkg);
+          }
+        }}
       />
     </div>
   );

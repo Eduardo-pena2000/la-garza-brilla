@@ -25,7 +25,8 @@ import {
   ShieldCheck,
   AlertCircle,
 } from "lucide-react";
-import { getCard } from "@/lib/deck";
+import { getCard, DECK } from "@/lib/deck";
+import { getCurrentUser } from "@/lib/auth";
 import { getThemedCard } from "@/lib/deckSkins";
 import { BrandBackground } from "@/components/BrandBackground";
 import { MiniBoardIllustration } from "@/components/MiniBoardIllustration";
@@ -140,6 +141,15 @@ function randomCards(size: Size): number[] {
   return pool.slice(0, total);
 }
 
+function shuffleCards(pool: number[]): number[] {
+  const arr = [...pool];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 function MesaPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
@@ -151,7 +161,24 @@ function MesaPage() {
   const [isChangingTablas, setIsChangingTablas] = useState(false);
   const [tempSelectedTablas, setTempSelectedTablas] = useState<string[]>([]);
 
-  const myName = typeof window !== "undefined" ? localStorage.getItem("garza:name") || "Jugador" : "Jugador";
+  // Verificación de identidad: si entra por enlace sin cuenta ni nombre, redirigir a inicio
+  const user = getCurrentUser();
+  const storedName = typeof window !== "undefined" ? localStorage.getItem("garza:name") : null;
+  const hasIdentity = Boolean(
+    (user && user.email) ||
+    (storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado")
+  );
+
+  useEffect(() => {
+    if (!hasIdentity) {
+      navigate({
+        to: "/",
+        search: { redirect: `/mesa/${id}` },
+      });
+    }
+  }, [hasIdentity, id, navigate]);
+
+  const myName = (user?.name || storedName || "Jugador").trim();
   const playersList = Object.values(mesa?.players || {});
   const me = playersList.find((p) => p.name === myName);
   const isHostInLobby =
@@ -244,6 +271,13 @@ function MesaPage() {
         }
         window.dispatchEvent(new Event("garza:tablas-updated"));
       } catch { }
+    } else {
+      try {
+        const savedExisting = localStorage.getItem(`garza:selectedTablas:${id}`);
+        if (!savedExisting && matching.length > 0) {
+          localStorage.setItem(`garza:selectedTablas:${id}`, JSON.stringify(matching.slice(0, count).map((g) => g.id)));
+        }
+      } catch { }
     }
   }, [mesa?.size, mesa?.perPlayer, id]);
 
@@ -291,7 +325,14 @@ function MesaPage() {
     if (!mesa) return;
     try {
       const mesaRef = ref(database, `mesas/${id}`);
-      await update(mesaRef, { status: "en-juego" });
+      const initialDeck = shuffleCards(DECK.map((c) => c.n));
+      await update(mesaRef, {
+        status: "en-juego",
+        serverPaused: false,
+        deck: initialDeck,
+        drawnIdx: 0,
+        winner: null,
+      });
       navigate({ to: "/mesa/$id/jugar", params: { id: mesa.id } });
     } catch (e) {
       console.error(e);
