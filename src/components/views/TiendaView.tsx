@@ -80,8 +80,8 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
         const storedCoins = localStorage.getItem("garza:coins");
         if (storedCoins) setCoins(parseInt(storedCoins, 10));
         else {
-          localStorage.setItem("garza:coins", "500");
-          setCoins(500);
+          localStorage.setItem("garza:coins", "0");
+          setCoins(0);
         }
 
         const storedItems = localStorage.getItem("garza:owned");

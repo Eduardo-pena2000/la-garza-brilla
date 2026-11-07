@@ -111,6 +111,16 @@ function CrearSalaVipPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successModal, setSuccessModal] = useState<{ id: string; name: string } | null>(null);
 
+  useEffect(() => {
+    const user = getCurrentUser();
+    const isSessionActive = typeof window !== "undefined" && sessionStorage.getItem("garza:session_active") === "true";
+    const storedName = typeof window !== "undefined" ? localStorage.getItem("garza:name") : null;
+    const hasValidName = Boolean(storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado");
+    if (!user?.email && (!isSessionActive || !hasValidName)) {
+      navigate({ to: "/", search: { redirect: "/crear-sala-vip" } });
+    }
+  }, [navigate]);
+
   // My VIP rooms list
   const [myVipRooms, setMyVipRooms] = useState<any[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(true);
@@ -275,6 +285,7 @@ function CrearSalaVipPage() {
 
       try {
         localStorage.setItem(`garza:host:${mesaId}`, "true");
+        sessionStorage.setItem(`garza:host:${mesaId}`, "true");
       } catch {}
 
       setSuccessModal({ id: mesaId, name: roomName.trim() });

@@ -27,6 +27,7 @@ import { getCard } from "@/lib/deck";
 import { getThemedCard } from "@/lib/deckSkins";
 import { ref, push, set } from "firebase/database";
 import { database } from "@/lib/firebase";
+import { getCurrentUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/abrir-mesa")({
   head: () => ({
@@ -100,6 +101,16 @@ function AbrirMesaPage() {
   const [hostName, setHostName] = useState<string>("");
   const [createdMesa, setCreatedMesa] = useState<null | { name: string; id: string }>(null);
   const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    const user = getCurrentUser();
+    const isSessionActive = typeof window !== "undefined" && sessionStorage.getItem("garza:session_active") === "true";
+    const storedName = typeof window !== "undefined" ? localStorage.getItem(NAME_KEY) : null;
+    const hasValidName = Boolean(storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado");
+    if (!user?.email && (!isSessionActive || !hasValidName)) {
+      navigate({ to: "/", search: { redirect: "/abrir-mesa" } });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     setTablas(loadTablas());
@@ -186,6 +197,7 @@ function AbrirMesaPage() {
       setError("");
       try {
         localStorage.setItem(`garza:host:${mesaId}`, "true");
+        sessionStorage.setItem(`garza:host:${mesaId}`, "true");
       } catch {
         /* ignore */
       }

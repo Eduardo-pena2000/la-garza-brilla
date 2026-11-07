@@ -1,13 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { PartyPopper, Mail, Crown, ArrowRight, UserCheck } from "lucide-react";
+import { useState } from "react";
+import { PartyPopper, Mail } from "lucide-react";
 import { BrandBackground } from "@/components/BrandBackground";
 import { BrandLogo } from "@/components/BrandLogo";
-import { BrandTitle } from "@/components/BrandTitle";
 import { NameModal } from "@/components/NameModal";
 import { EmailAuthModal } from "@/components/EmailAuthModal";
+import { OAuthModal } from "@/components/OAuthModal";
 import { LegalNoticeModal, type LegalTab } from "@/components/LegalNoticeModal";
-import { getCurrentUser, type UserAccount } from "@/lib/auth";
+import { loginAsGuest, type UserAccount } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
@@ -33,15 +33,16 @@ function LoginPage() {
 
   const [askName, setAskName] = useState(false);
   const [openEmailAuth, setOpenEmailAuth] = useState(false);
-  const [existingUser, setExistingUser] = useState<UserAccount | null>(null);
+  const [oauthProvider, setOauthProvider] = useState<"google" | "apple" | null>(null);
   const [legalModalTab, setLegalModalTab] = useState<LegalTab | null>(null);
 
-  useEffect(() => {
-    const user = getCurrentUser();
-    if (user && user.email) {
-      setExistingUser(user);
+  const handleAuthSuccess = (_user: UserAccount) => {
+    if (redirectTarget) {
+      window.location.href = redirectTarget;
+    } else {
+      navigate({ to: "/menu" });
     }
-  }, []);
+  };
 
   return (
     <BrandBackground>
@@ -66,42 +67,6 @@ function LoginPage() {
           </div>
         )}
 
-        {/* Existing Session Quick-Resume banner if available */}
-        {existingUser && (
-          <div className="w-full mb-3 p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 border border-amber-400/40 backdrop-blur-md flex items-center justify-between gap-3 animate-fade-in shadow-lg">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0">
-                {existingUser.isVip ? <Crown className="w-5 h-5 fill-current" /> : <UserCheck className="w-5 h-5" />}
-              </div>
-              <div className="truncate text-left">
-                <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
-                  {existingUser.name}
-                  {existingUser.isVip && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black uppercase">
-                      VIP
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10px] text-white/60 truncate">{existingUser.email}</div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (redirectTarget) {
-                  window.location.href = redirectTarget;
-                } else {
-                  navigate({ to: "/menu" });
-                }
-              }}
-              className="shrink-0 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 text-xs font-bold font-game flex items-center gap-1 shadow active:scale-95 transition"
-            >
-              <span>{redirectTarget ? "Entrar a Sala" : "Continuar"}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
         <div className="mt-2 flex w-full flex-col gap-3">
           {/* Iniciar sesión con Correo y Contraseña */}
           <button
@@ -122,7 +87,7 @@ function LoginPage() {
             type="button"
             className="group relative flex h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-white text-[15px] font-semibold text-[color:var(--brand-navy-dark)] shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.5)] active:scale-[0.98] animate-slide-up-soft"
             style={{ animationDelay: "0.45s" }}
-            onClick={() => setAskName(true)}
+            onClick={() => setOauthProvider("google")}
           >
             <span aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-12 bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" style={{ animation: "shimmer-x 2.4s ease-in-out infinite" }} />
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-[color:var(--brand-navy-dark)]/5">
@@ -136,7 +101,7 @@ function LoginPage() {
             type="button"
             className="relative flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-black text-[15px] font-semibold text-white shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.6)] active:scale-[0.98] animate-slide-up-soft"
             style={{ animationDelay: "0.55s" }}
-            onClick={() => setAskName(true)}
+            onClick={() => setOauthProvider("apple")}
           >
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/10">
               <AppleIcon className="h-5 w-5" />
@@ -191,12 +156,7 @@ function LoginPage() {
         open={askName}
         onClose={() => setAskName(false)}
         onSave={(name) => {
-          try {
-            localStorage.setItem("garza:name", name);
-            window.dispatchEvent(new Event("garza:auth-updated"));
-          } catch {
-            /* ignore */
-          }
+          loginAsGuest(name);
           setAskName(false);
           if (redirectTarget) {
             window.location.href = redirectTarget;
@@ -210,13 +170,17 @@ function LoginPage() {
       <EmailAuthModal
         open={openEmailAuth}
         onClose={() => setOpenEmailAuth(false)}
-        onSuccess={(_user) => {
-          setOpenEmailAuth(false);
-          if (redirectTarget) {
-            window.location.href = redirectTarget;
-          } else {
-            navigate({ to: "/menu" });
-          }
+        onSuccess={handleAuthSuccess}
+      />
+
+      {/* Google and Apple OAuth Modal */}
+      <OAuthModal
+        open={Boolean(oauthProvider)}
+        provider={oauthProvider}
+        onClose={() => setOauthProvider(null)}
+        onSuccess={(user) => {
+          setOauthProvider(null);
+          handleAuthSuccess(user);
         }}
       />
 
@@ -238,35 +202,6 @@ function GoogleIcon({ className = "" }: { className?: string }) {
       <path fill="#4CAF50" d="M24 43.5c5.1 0 9.8-2 13.3-5.2l-6.1-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.1-11.3-7.5l-6.5 5C9.5 39 16.2 43.5 24 43.5z"/>
       <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4-4.1 5.2l6.1 5.2c-.4.4 6.7-4.9 6.7-14.4 0-1.2-.1-2.4-.4-3.5z"/>
     </svg>
-  );
-}
-
-function PapelPicado() {
-  const colors = [
-    "var(--brand-pink)",
-    "var(--brand-gold)",
-    "var(--brand-teal)",
-    "var(--brand-cyan)",
-    "oklch(0.72 0.2 30)",
-  ];
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-between px-1">
-      {Array.from({ length: 9 }).map((_, i) => (
-        <div
-          key={i}
-          className="animate-papel-sway"
-          style={{ animationDelay: `${(i % 5) * 0.25}s`, animationDuration: `${3 + (i % 3) * 0.4}s` }}
-        >
-          <svg width="46" height="60" viewBox="0 0 46 60">
-            <path d="M0 0 H46 V40 L23 58 L0 40 Z" fill={colors[i % colors.length]} opacity="0.85" />
-            <circle cx="23" cy="16" r="6" fill="rgba(0,0,0,0.35)" />
-            <circle cx="11" cy="28" r="3.2" fill="rgba(0,0,0,0.35)" />
-            <circle cx="35" cy="28" r="3.2" fill="rgba(0,0,0,0.35)" />
-            <circle cx="23" cy="34" r="3.6" fill="rgba(0,0,0,0.35)" />
-          </svg>
-        </div>
-      ))}
-    </div>
   );
 }
 

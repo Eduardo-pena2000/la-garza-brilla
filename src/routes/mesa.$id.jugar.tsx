@@ -55,6 +55,7 @@ interface Mesa {
   isVip?: boolean; isScheduled?: boolean; scheduledDate?: string; scheduledTime?: string;
   rounds?: any[]; currentRound?: number;
   whitelistOnly?: boolean; registeredPlayers?: { name: string }[];
+  hostLeft?: boolean;
 }
 interface ChatMsg {
   id: string; text: string; sender: string; timestamp: number;
@@ -269,9 +270,10 @@ function JugarPage() {
   // Verificación de identidad: si entra por enlace sin cuenta ni nombre, redirigir a inicio
   const user = getCurrentUser();
   const storedName = typeof window !== "undefined" ? localStorage.getItem("garza:name") : null;
+  const isSessionActive = typeof window !== "undefined" && sessionStorage.getItem("garza:session_active") === "true";
   const hasValidIdentity = Boolean(
     (user && user.email) ||
-    (storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado")
+    (isSessionActive && storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado")
   );
 
   useEffect(() => {
@@ -284,8 +286,13 @@ function JugarPage() {
   }, [hasValidIdentity, id, navigate]);
 
   const userName = (user?.name || storedName || "Jugador").trim();
-  const isHost = (typeof window !== "undefined" && localStorage.getItem(`garza:host:${id}`) === "true") || mesa?.host === userName;
+  const isHost = Boolean(
+    typeof window !== "undefined" &&
+    (sessionStorage.getItem(`garza:host:${id}`) === "true" || localStorage.getItem(`garza:host:${id}`) === "true") &&
+    mesa?.host === userName
+  );
   const cardAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioPoolRef = useRef<Map<number, HTMLAudioElement>>(new Map());
 
   // Chunk active boards into pages of 4 (e.g. 8 tablas -> Page 1: 4, Page 2: 4)
   const pages = useMemo(() => {
@@ -419,15 +426,20 @@ function JugarPage() {
   const deck = mesa?.deck || [];
   const drawnIdx = mesa?.drawnIdx ?? -1;
   const isGameStarted = drawnIdx >= 0;
+  const isGameActive = Boolean(mesa && mesa.status === "en-juego" && drawnIdx >= 0 && !mesa.winner);
 
   // Determinar si entra como espectador:
-  // 1. Si el usuario explícitamente tiene rol de espectador
+  // 1. Si no ha iniciado la baraja o ya hay ganador, nadie es espectador (todos juegan)
   // 2. Si la sala tiene whitelist y no está incluido
-  // 3. Si la ronda YA está en curso (drawnIdx >= 0) y el usuario entra nuevo sin haber estado en el lobby
+  // 3. Si la ronda YA está en curso (isGameActive) y el usuario entra nuevo sin haber estado en el lobby
   const isSpectator = useMemo(() => {
     if (!mesa) return false;
+    // Si la ronda terminó o no ha iniciado la baraja, nadie es espectador (todos son jugadores)
+    if (drawnIdx < 0 || Boolean(mesa.winner)) {
+      return false;
+    }
     const userPlayer = mesa.players?.[userName];
-    if (userPlayer?.role === "spectator" || (userPlayer?.status as string) === "spectator") {
+    if (userPlayer?.role === "spectator") {
       return true;
     }
     if (mesa.whitelistOnly && mesa.registeredPlayers && !isHost) {
@@ -436,13 +448,16 @@ function JugarPage() {
       );
       if (!allowed) return true;
     }
-    const wasInLobby = typeof window !== "undefined" && localStorage.getItem(`garza:registered:${id}`) === "true";
+    const wasInLobby = typeof window !== "undefined" && (
+      sessionStorage.getItem(`garza:registered:${id}`) === "true" ||
+      localStorage.getItem(`garza:registered:${id}`) === "true"
+    );
     const hadActiveSession = Boolean(userPlayer && userPlayer.status !== "spectator");
-    if (!wasInLobby && !hadActiveSession && mesa.status === "en-juego" && drawnIdx >= 0 && !isHost) {
+    if (!wasInLobby && !hadActiveSession && isGameActive && !isHost) {
       return true;
     }
     return false;
-  }, [mesa, userName, isHost, drawnIdx, id]);
+  }, [mesa, userName, isHost, drawnIdx, id, isGameActive]);
 
   // Keep-alive presence & bot registration: si el jugador se desconecta, el bot toma el control
   useEffect(() => {
@@ -514,50 +529,72 @@ function JugarPage() {
     }
   }, [drawnIdx, mesa?.status]);
 
-  // Desbloqueo del contexto de audio en Safari/iOS en la primera interacción táctil
+  // Desbloqueo robusto del contexto de audio en Safari/iOS en la primera interacción táctil
   useEffect(() => {
     const unlock = () => {
-      if (!cardAudioRef.current) {
-        cardAudioRef.current = new Audio();
-      }
-      cardAudioRef.current.load();
+      try {
+        if (!cardAudioRef.current) {
+          cardAudioRef.current = new Audio();
+        }
+        cardAudioRef.current.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+        const p = cardAudioRef.current.play();
+        if (p !== undefined) {
+          p.then(() => {
+            if (cardAudioRef.current) {
+              cardAudioRef.current.pause();
+              cardAudioRef.current.currentTime = 0;
+            }
+          }).catch(() => {});
+        }
+      } catch {}
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("touchstart", unlock);
     };
-    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
-    window.addEventListener("touchstart", unlock, { once: true, passive: true });
+    window.addEventListener("pointerdown", unlock, { passive: true });
+    window.addEventListener("touchstart", unlock, { passive: true });
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("touchstart", unlock);
     };
   }, []);
 
-  // Pre-carga anticipada de audios de las próximas 5 cartas para evitar desfase en iOS/móvil
+  // Pre-carga anticipada de audios de las próximas 6 cartas para evitar desfase en iOS/móvil
   useEffect(() => {
     if (!deck || deck.length === 0 || !settings.audio) return;
     const start = Math.max(0, drawnIdx);
-    const nextBatch = deck.slice(start, start + 5);
+    const nextBatch = deck.slice(start, start + 6);
     const basePath = settings.voice === "default" ? "/audio/cards" : `/audio/cards/${settings.voice}`;
     nextBatch.forEach((c) => {
-      const pre = new Audio();
-      pre.preload = "auto";
-      pre.src = `${basePath}/b${c}.mp3`;
+      if (!audioPoolRef.current.has(c)) {
+        const pre = new Audio(`${basePath}/b${c}.mp3`);
+        pre.preload = "auto";
+        audioPoolRef.current.set(c, pre);
+      }
     });
   }, [deck, drawnIdx, settings.audio, settings.voice]);
 
-  // Reproducción de audio optimizada usando elemento persistente
+  // Reproducción de audio en tiempo real y sincronizada
   const currentCard = deck[drawnIdx];
   useEffect(() => {
     if (currentCard !== undefined && settings.audio && drawnIdx >= 0) {
       const basePath = settings.voice === "default" ? "/audio/cards" : `/audio/cards/${settings.voice}`;
-      if (!cardAudioRef.current) {
-        cardAudioRef.current = new Audio();
+      if (cardAudioRef.current) {
+        try {
+          cardAudioRef.current.pause();
+          cardAudioRef.current.currentTime = 0;
+        } catch {}
       }
-      const audio = cardAudioRef.current;
-      audio.pause();
+      let audio = audioPoolRef.current.get(currentCard);
+      if (!audio) {
+        audio = new Audio(`${basePath}/b${currentCard}.mp3`);
+        audioPoolRef.current.set(currentCard, audio);
+      }
+      cardAudioRef.current = audio;
       audio.currentTime = 0;
-      audio.src = `${basePath}/b${currentCard}.mp3`;
-      audio.play().catch(() => {});
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {});
+      }
     }
   }, [currentCard, drawnIdx, settings.audio, settings.voice]);
 
@@ -818,6 +855,25 @@ function JugarPage() {
     return () => clearInterval(interval);
   }, [isCaller, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, mesa?.deck?.length, mesa?.winner, mesa?.players, mesa?.prizePool, id]);
 
+  // Limpieza automática de la mesa si el anfitrión se fue o ya no quedan jugadores humanos
+  useEffect(() => {
+    if (!isCaller || !mesa || (mesa.status !== "terminada" && !mesa.winner)) return;
+
+    const hostPlayer = mesa.players?.[mesa.host];
+    const isHostGone = Boolean(mesa.hostLeft || !hostPlayer || hostPlayer.status === "disconnected");
+    const activeHumanPlayers = Object.values(mesa.players || {}).filter(
+      (p: any) => p.status === "active" && !p.isBot && p.role !== "spectator"
+    );
+
+    if (isHostGone || activeHumanPlayers.length === 0) {
+      // 5 segundos de cortesía para mostrar la celebración del ganador y luego eliminar la mesa
+      const timer = setTimeout(() => {
+        remove(ref(database, `mesas/${id}`)).catch(() => {});
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isCaller, mesa?.status, mesa?.winner, mesa?.players, mesa?.host, mesa?.hostLeft, id]);
+
   // Bot automático: juega por los invitados o anfitriones desconectados mientras se reconectan
   useEffect(() => {
     if (!isCaller || !mesa || mesa.status !== "en-juego" || mesa.serverPaused || !mesa.deck || drawnIdx < 0 || mesa.winner) return;
@@ -1047,16 +1103,21 @@ function JugarPage() {
                         if (otherPlayers.length === 0) {
                           remove(ref(database, `mesas/${id}`)).catch(() => {});
                         } else {
-                          const nextHost = otherPlayers[0];
                           update(ref(database, `mesas/${id}`), {
-                            host: nextHost,
-                            [`players/${nextHost}/role`]: "host"
+                            hostLeft: true,
                           }).catch(() => {});
                           remove(ref(database, `mesas/${id}/players/${userName}`)).catch(() => {});
                         }
                       } else {
                         remove(ref(database, `mesas/${id}/players/${userName}`)).catch(() => {});
                       }
+                      try {
+                        localStorage.removeItem(`garza:host:${id}`);
+                        sessionStorage.removeItem(`garza:host:${id}`);
+                        localStorage.removeItem(`garza:registered:${id}`);
+                        sessionStorage.removeItem(`garza:registered:${id}`);
+                        localStorage.removeItem(`garza:selectedTablas:${id}`);
+                      } catch {}
                       setActiveModal(null);
                       navigate({ to: "/menu" });
                     }}
@@ -1505,6 +1566,11 @@ function JugarPage() {
                       )}
 
                       {activeModal === "tablas" && (
+                        isGameActive ? (
+                          <div className="p-6 text-center text-amber-300 font-bold">
+                            No puedes cambiar de tablas mientras la partida está en curso.
+                          </div>
+                        ) : (
                         <div className="flex flex-col gap-3">
                           {/* Quick selection of count: 1, 2, 4, 8 */}
                           <div className="flex items-center justify-between bg-black/40 p-2.5 rounded-2xl border border-white/10 mb-1">
@@ -1636,6 +1702,7 @@ function JugarPage() {
                           )}
                           </div>
                         </div>
+                        )
                       )}
 
                       {activeModal === "modos" && (
@@ -2026,25 +2093,27 @@ function JugarPage() {
            </div>
         </main>
 
-        {/* CAMBIAR TABLAS / MODO BUTTONS */}
-        <div className="bg-[color:var(--brand-navy-deep)] py-2.5 px-4 flex justify-between gap-3 border-t border-white/10 shrink-0 z-30 relative shadow-2xl">
-          <button
-            type="button"
-            onClick={() => setActiveModal("tablas")}
-            className="flex-1 py-2.5 rounded-full border-2 border-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 active:bg-white/10 transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" strokeWidth={2.5} /> Cambiar Tablas
-          </button>
-          {isHost && (
+        {/* CAMBIAR TABLAS / MODO BUTTONS — SOLO DISPONIBLE ANTES DE EMPEZAR LA RONDA O AL TERMINAR */}
+        {!isGameActive && (
+          <div className="bg-[color:var(--brand-navy-deep)] py-2.5 px-4 flex justify-between gap-3 border-t border-white/10 shrink-0 z-30 relative shadow-2xl">
             <button
               type="button"
-              onClick={() => setActiveModal("modos")}
-              className="flex-1 py-2.5 rounded-full border-2 border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)] font-bold text-sm flex items-center justify-center gap-2 active:bg-[color:var(--brand-cyan)]/10 transition-colors"
+              onClick={() => setActiveModal("tablas")}
+              className="flex-1 py-2.5 rounded-full border-2 border-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 active:bg-white/10 transition-colors"
             >
-              <Triangle className="w-4 h-4 rotate-90" strokeWidth={2.5} /> Cambiar Modo
+              <RotateCcw className="w-4 h-4" strokeWidth={2.5} /> Cambiar Tablas
             </button>
-          )}
-        </div>
+            {isHost && drawnIdx < 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveModal("modos")}
+                className="flex-1 py-2.5 rounded-full border-2 border-[color:var(--brand-cyan)] text-[color:var(--brand-cyan)] font-bold text-sm flex items-center justify-center gap-2 active:bg-[color:var(--brand-cyan)]/10 transition-colors"
+              >
+                <Triangle className="w-4 h-4 rotate-90" strokeWidth={2.5} /> Cambiar Modo
+              </button>
+            )}
+          </div>
+        )}
 
         {/* MAIN BOTTOM BAR — SOLO VISIBLE PARA EL HOST */}
         {isHost && (

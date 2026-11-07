@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { ArrowLeft, Users, Coins, Search, Lock, X, AlertCircle, LayoutGrid, Crown, Calendar } from "lucide-react";
 import { ref, onValue } from "firebase/database";
 import { database } from "@/lib/firebase";
+import { getCurrentUser } from "@/lib/auth";
 import { BrandBackground } from "@/components/BrandBackground";
 import { JoinTableSelectionModal } from "@/components/JoinTableSelectionModal";
 
@@ -27,6 +28,16 @@ function LobbyBrowserPage() {
 
   // Table Selection Modal
   const [pendingJoinMesa, setPendingJoinMesa] = useState<any>(null);
+
+  useEffect(() => {
+    const user = getCurrentUser();
+    const isSessionActive = typeof window !== "undefined" && sessionStorage.getItem("garza:session_active") === "true";
+    const storedName = typeof window !== "undefined" ? localStorage.getItem("garza:name") : null;
+    const hasValidName = Boolean(storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado");
+    if (!user?.email && (!isSessionActive || !hasValidName)) {
+      navigate({ to: "/", search: { redirect: "/unirse" } });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     const mesasRef = ref(database, "mesas");

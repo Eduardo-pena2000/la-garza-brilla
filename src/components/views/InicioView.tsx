@@ -112,7 +112,7 @@ export function InicioView({
 
         const storedCoins = localStorage.getItem("garza:coins");
         if (storedCoins) setCoins(parseInt(storedCoins, 10));
-        else localStorage.setItem("garza:coins", "500");
+        else localStorage.setItem("garza:coins", "0");
 
         const storedVIP = localStorage.getItem("garza:vip");
         setIsVIP(storedVIP === "true");
@@ -173,7 +173,7 @@ export function InicioView({
     });
 
     if (addedCoins > 0) {
-      const current = parseInt(localStorage.getItem("garza:coins") || "500", 10);
+      const current = parseInt(localStorage.getItem("garza:coins") || "0", 10);
       const updated = current + addedCoins;
       setCoins(updated);
       localStorage.setItem("garza:coins", updated.toString());

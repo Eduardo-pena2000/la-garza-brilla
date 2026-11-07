@@ -185,7 +185,7 @@ export function DailyRouletteModal({ open, onClose, coins, onNavigateTienda }: D
     if (!winningPrize) return;
 
     if (winningPrize.type === "coins" && winningPrize.amount) {
-      const cur = parseInt(localStorage.getItem("garza:coins") || "500", 10);
+      const cur = parseInt(localStorage.getItem("garza:coins") || "0", 10);
       const updated = cur + winningPrize.amount;
       localStorage.setItem("garza:coins", updated.toString());
       window.dispatchEvent(new Event("garza:coins-updated"));

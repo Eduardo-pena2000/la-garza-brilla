@@ -175,7 +175,7 @@ export async function purchaseVip(
     // Modo web o desarrollo: simular compra exitosa
     console.log("[Purchases] Simulación de compra VIP");
     localStorage.setItem("garza:vip", "true");
-    const currentCoins = parseInt(localStorage.getItem("garza:coins") || "500", 10);
+    const currentCoins = parseInt(localStorage.getItem("garza:coins") || "0", 10);
     const newCoins = currentCoins + 2000;
     localStorage.setItem("garza:coins", newCoins.toString());
     _updateLocalUserCache({ isVip: true, coinsToAdd: 2000 });
@@ -205,7 +205,7 @@ export async function purchaseVip(
 
       // Actualizar almacenamiento local
       localStorage.setItem("garza:vip", "true");
-      const currentCoins = parseInt(localStorage.getItem("garza:coins") || "500", 10);
+      const currentCoins = parseInt(localStorage.getItem("garza:coins") || "0", 10);
       localStorage.setItem("garza:coins", (currentCoins + 2000).toString());
       _updateLocalUserCache({ isVip: true, coinsToAdd: 2000 });
 

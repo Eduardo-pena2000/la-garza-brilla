@@ -12,6 +12,7 @@ export interface UserAccount {
   equippedDeck: string;
   equippedWallpaper: string;
   equippedMarker: string;
+  authProvider?: "email" | "google" | "apple";
   createdAt: number;
   lastLogin: number;
 }
@@ -27,26 +28,11 @@ export const ADMIN_INITIAL_ACCOUNT: UserAccount = {
   email: "omgiscooljeff21@gmail.com",
   password: "admin123456",
   name: "Eduardo Alejandro (Jeff)",
-  isVip: true,
-  coins: 6000,
-  owned: [
-    "wp_clasico",
-    "wp_cempasuchil",
-    "wp_michis",
-    "wp_lomitos",
-    "wp_feria",
-    "wp_cantina",
-    "wp_casino_oro",
-    "deck_clasica",
-    "deck_michis",
-    "deck_lomitos",
-    "deck_neon",
-    "marker_frijol",
-    "marker_ficha",
-    "marker_moneda",
-  ],
-  equippedDeck: "deck_michis",
-  equippedWallpaper: "wp_cempasuchil",
+  isVip: false,
+  coins: 0,
+  owned: ["wp_clasico", "deck_clasica", "marker_frijol"],
+  equippedDeck: "deck_clasica",
+  equippedWallpaper: "wp_clasico",
   equippedMarker: "marker_frijol",
   createdAt: Date.now(),
   lastLogin: Date.now(),
@@ -65,15 +51,80 @@ export function getCurrentUser(): UserAccount | null {
 }
 
 /**
+ * Indica si la sesión actual es de invitado (no vinculada a cuenta cloud)
+ */
+export function isGuestSession(): boolean {
+  if (typeof window === "undefined") return false;
+  const user = getCurrentUser();
+  if (user && user.email) return false;
+  return sessionStorage.getItem("garza:is_guest") === "true";
+}
+
+/**
+ * Iniciar sesión como invitado (efímero, inicia con 0 monedas y datos limpios)
+ */
+export function loginAsGuest(guestName: string): void {
+  try {
+    const cleanName = guestName.trim() || "Invitado";
+    // Limpiar restos de cuentas anteriores
+    localStorage.removeItem(CURRENT_USER_KEY);
+    localStorage.removeItem("garza:vip");
+    localStorage.removeItem("garza:chest_inventory");
+    localStorage.removeItem("garza:roulette_cooldown");
+    localStorage.removeItem("garza:loot_history");
+
+    // Marcar sesión de invitado activa
+    sessionStorage.setItem("garza:session_active", "true");
+    sessionStorage.setItem("garza:is_guest", "true");
+    sessionStorage.setItem("garza:name", cleanName);
+
+    localStorage.setItem("garza:name", cleanName);
+    localStorage.setItem("garza:coins", "0");
+    localStorage.setItem("garza:vip", "false");
+    localStorage.setItem("garza:owned", JSON.stringify(["wp_clasico", "deck_clasica", "marker_frijol"]));
+    localStorage.setItem("garza:equipped_deck", "deck_clasica");
+    localStorage.setItem("garza:equipped_wallpaper", "wp_clasico");
+    localStorage.setItem("garza:equipped_marker", "marker_frijol");
+
+    window.dispatchEvent(new Event("garza:auth-updated"));
+    window.dispatchEvent(new Event("garza:coins-updated"));
+    window.dispatchEvent(new Event("garza:vip-updated"));
+    window.dispatchEvent(new Event("garza:deck-updated"));
+    window.dispatchEvent(new Event("garza:wallpaper-updated"));
+  } catch (e) {
+    console.error("Error setting guest session", e);
+  }
+}
+
+/**
+ * Limpiar datos de sesión de invitado
+ */
+export function clearGuestSession(): void {
+  try {
+    sessionStorage.removeItem("garza:session_active");
+    sessionStorage.removeItem("garza:is_guest");
+    sessionStorage.removeItem("garza:name");
+    localStorage.removeItem("garza:name");
+    localStorage.setItem("garza:coins", "0");
+    localStorage.setItem("garza:vip", "false");
+  } catch {}
+}
+
+/**
  * Guardar datos de usuario en localStorage y disparar eventos
  */
 export function applyUserSession(user: UserAccount): void {
   try {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("garza:session_active", "true");
+      sessionStorage.removeItem("garza:is_guest");
+    }
+
     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
     localStorage.setItem("garza:name", user.name);
     localStorage.setItem("garza:vip", user.isVip ? "true" : "false");
-    localStorage.setItem("garza:coins", user.coins.toString());
-    localStorage.setItem("garza:owned", JSON.stringify(user.owned || []));
+    localStorage.setItem("garza:coins", (user.coins || 0).toString());
+    localStorage.setItem("garza:owned", JSON.stringify(user.owned || ["wp_clasico", "deck_clasica", "marker_frijol"]));
     if (user.equippedDeck) localStorage.setItem("garza:equipped_deck", user.equippedDeck);
     if (user.equippedWallpaper) localStorage.setItem("garza:equipped_wallpaper", user.equippedWallpaper);
     if (user.equippedMarker) localStorage.setItem("garza:equipped_marker", user.equippedMarker);
@@ -100,17 +151,64 @@ export async function ensureAdminAccountProvisioned(): Promise<void> {
     if (!snapshot.exists()) {
       await set(userRef, ADMIN_INITIAL_ACCOUNT);
     } else {
-      // Garantizar que conserve VIP y monedas
       const existing = snapshot.val();
       await update(userRef, {
-        isVip: true,
-        coins: Math.max(existing.coins || 0, 6000),
         owned: Array.from(new Set([...(existing.owned || []), ...ADMIN_INITIAL_ACCOUNT.owned])),
       });
     }
   } catch (err) {
     console.warn("Could not sync admin account with Firebase (offline fallback active):", err);
   }
+}
+
+/**
+ * Iniciar sesión o registrarse con proveedor OAuth (Google / Apple)
+ */
+export async function loginWithOAuth(
+  provider: "google" | "apple",
+  email: string,
+  name: string
+): Promise<UserAccount> {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = name.trim();
+
+  if (!cleanEmail || !cleanEmail.includes("@")) {
+    throw new Error("Por favor ingresa un correo electrónico válido.");
+  }
+  if (!cleanName) {
+    throw new Error("Por favor ingresa tu nombre de jugador.");
+  }
+
+  const key = encodeEmailKey(cleanEmail);
+  const userRef = ref(database, `users/${key}`);
+  const snapshot = await get(userRef);
+
+  let user: UserAccount;
+  if (snapshot.exists()) {
+    user = snapshot.val() as UserAccount;
+    user.name = cleanName || user.name;
+    user.lastLogin = Date.now();
+    await update(userRef, { lastLogin: user.lastLogin, name: user.name }).catch(() => {});
+  } else {
+    user = {
+      id: `usr_${provider}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      email: cleanEmail,
+      name: cleanName,
+      isVip: false,
+      coins: 0,
+      owned: ["wp_clasico", "deck_clasica", "marker_frijol"],
+      equippedDeck: "deck_clasica",
+      equippedWallpaper: "wp_clasico",
+      equippedMarker: "marker_frijol",
+      authProvider: provider,
+      createdAt: Date.now(),
+      lastLogin: Date.now(),
+    };
+    await set(userRef, user);
+  }
+
+  applyUserSession(user);
+  return user;
 }
 
 /**
@@ -127,7 +225,6 @@ export async function loginWithEmail(email: string, password: string): Promise<U
       lastLogin: Date.now(),
     };
     applyUserSession(user);
-    // Sincronizar asíncronamente en Firebase
     ensureAdminAccountProvisioned().catch(() => {});
     return user;
   }
@@ -147,7 +244,6 @@ export async function loginWithEmail(email: string, password: string): Promise<U
 
   userData.lastLogin = Date.now();
   await update(userRef, { lastLogin: userData.lastLogin }).catch(() => {});
-
   applyUserSession(userData);
   return userData;
 }
@@ -181,24 +277,19 @@ export async function registerWithEmail(
     throw new Error("Ya existe una cuenta con este correo. Inicia sesión en su lugar.");
   }
 
-  // Nueva cuenta con paquete de bienvenida
+  // Nueva cuenta: inicia con 0 monedas y elementos básicos por defecto
   const newAccount: UserAccount = {
     id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     email: cleanEmail,
     password,
     name: cleanName,
-    isVip: cleanEmail === ADMIN_INITIAL_ACCOUNT.email, // Si es el correo oficial, activar VIP
-    coins: 1000, // Bono de bienvenida de 1,000 monedas
-    owned: [
-      "wp_clasico",
-      "deck_clasica",
-      "marker_frijol",
-      "marker_ficha",
-      ...(cleanEmail === ADMIN_INITIAL_ACCOUNT.email ? ADMIN_INITIAL_ACCOUNT.owned : []),
-    ],
+    isVip: false,
+    coins: 0,
+    owned: ["wp_clasico", "deck_clasica", "marker_frijol"],
     equippedDeck: "deck_clasica",
     equippedWallpaper: "wp_clasico",
     equippedMarker: "marker_frijol",
+    authProvider: "email",
     createdAt: Date.now(),
     lastLogin: Date.now(),
   };
@@ -213,11 +304,16 @@ export async function registerWithEmail(
  */
 export function logoutUser(): void {
   try {
+    sessionStorage.removeItem("garza:session_active");
+    sessionStorage.removeItem("garza:is_guest");
+    sessionStorage.removeItem("garza:name");
     localStorage.removeItem(CURRENT_USER_KEY);
     localStorage.setItem("garza:name", "Invitado");
+    localStorage.setItem("garza:coins", "0");
     localStorage.setItem("garza:vip", "false");
     window.dispatchEvent(new Event("garza:auth-updated"));
     window.dispatchEvent(new Event("garza:vip-updated"));
+    window.dispatchEvent(new Event("garza:coins-updated"));
   } catch {}
 }
 

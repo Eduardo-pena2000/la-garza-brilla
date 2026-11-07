@@ -1,11 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useRef, useState, useEffect } from "react";
 import { Home, Gamepad2, ShoppingCart, Layers, User } from "lucide-react";
 import { InicioView } from "@/components/views/InicioView";
 import { JugarView } from "@/components/views/JugarView";
 import { TablasView } from "@/components/views/TablasView";
 import { TiendaView } from "@/components/views/TiendaView";
 import { PerfilView } from "@/components/views/PerfilView";
+import { getCurrentUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/menu")({
   head: () => ({
@@ -18,8 +19,19 @@ export const Route = createFileRoute("/menu")({
 });
 
 function MainTabsLayout() {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState(0); // 0: Inicio, 1: Jugar, 2: Barajas, 3: Tienda, 4: Perfil
+
+  useEffect(() => {
+    const user = getCurrentUser();
+    const isSessionActive = typeof window !== "undefined" && sessionStorage.getItem("garza:session_active") === "true";
+    const storedName = typeof window !== "undefined" ? localStorage.getItem("garza:name") : null;
+    const hasValidName = Boolean(storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado");
+    if (!user?.email && (!isSessionActive || !hasValidName)) {
+      navigate({ to: "/" });
+    }
+  }, [navigate]);
 
   // Sync scroll position with active tab
   const handleScroll = () => {

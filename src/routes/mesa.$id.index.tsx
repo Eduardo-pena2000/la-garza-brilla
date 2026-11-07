@@ -164,9 +164,10 @@ function MesaPage() {
   // Verificación de identidad: si entra por enlace sin cuenta ni nombre, redirigir a inicio
   const user = getCurrentUser();
   const storedName = typeof window !== "undefined" ? localStorage.getItem("garza:name") : null;
+  const isSessionActive = typeof window !== "undefined" && sessionStorage.getItem("garza:session_active") === "true";
   const hasIdentity = Boolean(
     (user && user.email) ||
-    (storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado")
+    (isSessionActive && storedName && storedName.trim().length > 0 && storedName !== "Jugador" && storedName !== "Invitado")
   );
 
   useEffect(() => {
@@ -181,10 +182,10 @@ function MesaPage() {
   const myName = (user?.name || storedName || "Jugador").trim();
   const playersList = Object.values(mesa?.players || {});
   const me = playersList.find((p) => p.name === myName);
-  const isHostInLobby =
-    (me?.role === "host") ||
-    (typeof window !== "undefined" && localStorage.getItem(`garza:host:${id}`) === "true") ||
-    mesa?.host === myName;
+  const isHostInLobby = Boolean(
+    (typeof window !== "undefined" && (sessionStorage.getItem(`garza:host:${id}`) === "true" || localStorage.getItem(`garza:host:${id}`) === "true")) &&
+    mesa?.host === myName
+  );
 
   useEffect(() => {
     setTablas(loadTablas());
@@ -231,7 +232,7 @@ function MesaPage() {
       if (mesa.status === "abierta") {
         discRef = onDisconnect(playerRef);
         discRef.remove();
-        if (isHostInLobby && Object.keys(mesa.players || {}).length <= 1) {
+        if (isHostInLobby) {
           roomDiscRef = onDisconnect(ref(database, `mesas/${id}`));
           roomDiscRef.remove();
         }
@@ -426,21 +427,19 @@ function MesaPage() {
   const code = mesa.id.slice(0, 6).toUpperCase();
 
   function handleExitLobby() {
-    const otherPlayers = Object.keys(mesa?.players || {}).filter(p => p !== myName);
     if (isHostInLobby) {
-      if (otherPlayers.length === 0) {
-        remove(ref(database, `mesas/${id}`)).catch(() => {});
-      } else {
-        const nextHost = otherPlayers[0];
-        update(ref(database, `mesas/${id}`), {
-          host: nextHost,
-          [`players/${nextHost}/role`]: "host"
-        }).catch(() => {});
-        remove(ref(database, `mesas/${id}/players/${myName}`)).catch(() => {});
-      }
+      // Si el anfitrión sale del lobby, la partida desaparece por completo
+      remove(ref(database, `mesas/${id}`)).catch(() => {});
     } else {
       remove(ref(database, `mesas/${id}/players/${myName}`)).catch(() => {});
     }
+    try {
+      localStorage.removeItem(`garza:host:${id}`);
+      sessionStorage.removeItem(`garza:host:${id}`);
+      localStorage.removeItem(`garza:registered:${id}`);
+      sessionStorage.removeItem(`garza:registered:${id}`);
+      localStorage.removeItem(`garza:selectedTablas:${id}`);
+    } catch {}
     navigate({ to: "/menu" });
   }
 
