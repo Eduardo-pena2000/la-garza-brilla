@@ -6,9 +6,12 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { FloatingMatchCountdown } from "@/components/FloatingMatchCountdown";
+import { initPurchases, checkVipStatus } from "@/lib/purchases";
+import { getCurrentUser, encodeEmailKey } from "@/lib/auth";
 
 import appCss from "../styles.css?url";
 
@@ -34,7 +37,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
 
@@ -119,6 +122,17 @@ function RootComponent() {
       if (typeof window !== "undefined" && window.location.search.includes("reset=1")) {
         localStorage.clear();
       }
+    } catch {
+      /* ignore */
+    }
+
+    // Inicializar RevenueCat y sincronizar estado VIP desde Firebase RTDB
+    try {
+      const user = getCurrentUser();
+      const userId = user?.email ? encodeEmailKey(user.email) : undefined;
+      initPurchases(userId).then(() => {
+        checkVipStatus(userId).catch(() => {});
+      }).catch(() => {});
     } catch {
       /* ignore */
     }

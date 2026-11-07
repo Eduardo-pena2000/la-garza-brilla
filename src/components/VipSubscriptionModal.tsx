@@ -1,8 +1,18 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Crown, Sparkles, Check, X, Shield, Trophy, Users, Calendar, Coins, ShieldCheck, ArrowRight } from "lucide-react";
+import { Crown, Sparkles, Check, X, Shield, Trophy, Users, Calendar, Coins, ShieldCheck, ArrowRight, RotateCcw } from "lucide-react";
 import { CoinAnimation } from "@/components/CoinAnimation";
 import { useNavigate } from "@tanstack/react-router";
+import { Capacitor } from "@capacitor/core";
+import {
+  purchaseVip,
+  getVipOffering,
+  restorePurchases,
+  checkVipStatus,
+  type PurchaseResult,
+} from "@/lib/purchases";
+import { getCurrentUser, encodeEmailKey } from "@/lib/auth";
+import type { PurchasesPackage } from "@revenuecat/purchases-capacitor";
 
 interface VipSubscriptionModalProps {
   open: boolean;
@@ -14,11 +24,31 @@ export function VipSubscriptionModal({ open, onClose, onSuccess }: VipSubscripti
   const navigate = useNavigate();
   const [isVip, setIsVip] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [justPurchased, setJustPurchased] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [vipPackage, setVipPackage] = useState<PurchasesPackage | null>(null);
+  const [storePrice, setStorePrice] = useState<string>("$99 MXN / mes");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setIsVip(localStorage.getItem("garza:vip") === "true");
+    }
+
+    const user = getCurrentUser();
+    const userId = user?.email ? encodeEmailKey(user.email) : undefined;
+    checkVipStatus(userId).then((active) => {
+      setIsVip(active);
+    }).catch(() => {});
+
+    // Cargar precio real de la tienda (solo en nativo)
+    if (Capacitor.isNativePlatform()) {
+      getVipOffering().then((pkg) => {
+        if (pkg) {
+          setVipPackage(pkg);
+          setStorePrice(pkg.product.priceString + " / mes");
+        }
+      });
     }
   }, [open]);
 
@@ -36,29 +66,57 @@ export function VipSubscriptionModal({ open, onClose, onSuccess }: VipSubscripti
   if (!open) return null;
   if (typeof document === "undefined") return null;
 
-  const handleSubscribe = () => {
-    setLoading(true);
-    setTimeout(() => {
-      try {
-        localStorage.setItem("garza:vip", "true");
-        // Bonus 2000 coins on subscription
-        const currentCoins = parseInt(localStorage.getItem("garza:coins") || "500", 10);
-        const newCoins = currentCoins + 2000;
-        localStorage.setItem("garza:coins", newCoins.toString());
+  const getUserId = () => {
+    const user = getCurrentUser();
+    return user?.email ? encodeEmailKey(user.email) : "guest";
+  };
 
-        // Dispatch events so components re-read
-        window.dispatchEvent(new Event("garza:vip-updated"));
-        window.dispatchEvent(new Event("garza:coins-updated"));
-      } catch (e) {
-        console.error(e);
+  const handleSubscribe = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      let result: PurchaseResult;
+      if (Capacitor.isNativePlatform() && vipPackage) {
+        // Compra real via App Store / Play Store
+        result = await purchaseVip(getUserId(), vipPackage);
+      } else {
+        // Simulación en web/dev
+        result = await purchaseVip(getUserId(), {} as PurchasesPackage);
       }
 
-      setIsVip(true);
+      if (result.success) {
+        setIsVip(true);
+        setJustPurchased(true);
+        if (onSuccess) onSuccess();
+      } else if (!result.cancelled) {
+        setErrorMsg(result.error ?? "No se pudo completar la suscripción. Intenta de nuevo.");
+      }
+      // Si canceló, no mostramos error
+    } catch (e) {
+      setErrorMsg("Error inesperado. Intenta de nuevo.");
+      console.error(e);
+    } finally {
       setLoading(false);
-      setJustPurchased(true);
+    }
+  };
 
-      if (onSuccess) onSuccess();
-    }, 600);
+  const handleRestore = async () => {
+    setRestoring(true);
+    setErrorMsg(null);
+    try {
+      const restored = await restorePurchases(getUserId());
+      if (restored) {
+        setIsVip(true);
+        setJustPurchased(true);
+        if (onSuccess) onSuccess();
+      } else {
+        setErrorMsg("No se encontró ninguna compra anterior para restaurar.");
+      }
+    } catch {
+      setErrorMsg("Error al restaurar compras. Intenta de nuevo.");
+    } finally {
+      setRestoring(false);
+    }
   };
 
   const perks = [
@@ -261,21 +319,48 @@ export function VipSubscriptionModal({ open, onClose, onSuccess }: VipSubscripti
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={handleSubscribe}
-              disabled={loading}
-              className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black text-base shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:shadow-[0_0_35px_rgba(245,158,11,0.7)] active:scale-[0.98] transition flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation cursor-pointer"
-            >
-              {loading ? (
-                <span>Activando membresía...</span>
-              ) : (
-                <>
-                  <Crown className="w-5 h-5 fill-current" />
-                  <span>Suscribirme por $99 MXN / mes</span>
-                </>
+            <div className="space-y-3">
+              {/* Botón de compra principal */}
+              <button
+                type="button"
+                onClick={handleSubscribe}
+                disabled={loading || restoring}
+                className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black text-base shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:shadow-[0_0_35px_rgba(245,158,11,0.7)] active:scale-[0.98] transition flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation cursor-pointer"
+              >
+                {loading ? (
+                  <span>Procesando pago...</span>
+                ) : (
+                  <>
+                    <Crown className="w-5 h-5 fill-current" />
+                    <span>Suscribirme — {storePrice}</span>
+                  </>
+                )}
+              </button>
+
+              {/* Restaurar compras (requerido por Apple) */}
+              <button
+                type="button"
+                onClick={handleRestore}
+                disabled={loading || restoring}
+                className="w-full py-2.5 text-xs text-white/50 hover:text-white/80 transition text-center touch-manipulation cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-30"
+              >
+                <RotateCcw className="w-3 h-3" />
+                {restoring ? "Restaurando..." : "Restaurar compra anterior"}
+              </button>
+
+              {/* Mensaje de error */}
+              {errorMsg && (
+                <p className="text-center text-xs text-red-400 font-semibold mt-1 px-2">
+                  {errorMsg}
+                </p>
               )}
-            </button>
+
+              {/* Aviso legal requerido por Apple */}
+              <p className="text-center text-[10px] text-white/30 leading-relaxed px-2">
+                La suscripción se cobra a tu cuenta de {typeof window !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent) ? "App Store" : "Google Play"}.
+                Se renueva automáticamente hasta que canceles. Cancela en cualquier momento desde la configuración de tu cuenta.
+              </p>
+            </div>
           )}
 
           {justPurchased && (

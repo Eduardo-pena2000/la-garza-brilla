@@ -14,10 +14,21 @@ import {
   Package,
   Flame,
   Check,
+  RotateCcw,
 } from "lucide-react";
 import { CoinAnimation } from "@/components/CoinAnimation";
 import { VipSubscriptionModal } from "@/components/VipSubscriptionModal";
 import { ChestOpeningModal } from "@/components/ChestOpeningModal";
+import { Capacitor } from "@capacitor/core";
+import {
+  purchaseCoins,
+  getCoinsOffering,
+  PRODUCT_IDS,
+  COINS_BY_PRODUCT,
+  restorePurchases,
+} from "@/lib/purchases";
+import { getCurrentUser, encodeEmailKey } from "@/lib/auth";
+import type { PurchasesPackage } from "@revenuecat/purchases-capacitor";
 import {
   CHESTS,
   openChest,
@@ -38,6 +49,13 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
   const [ownedItems, setOwnedItems] = useState<string[]>([]);
   const [isVip, setIsVip] = useState(false);
   const [showVipModal, setShowVipModal] = useState(false);
+
+  // IAP state
+  const [coinsPackages, setCoinsPackages] = useState<PurchasesPackage[]>([]);
+  const [buyingPackageId, setBuyingPackageId] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [iapError, setIapError] = useState<string | null>(null);
+  const [iapSuccess, setIapSuccess] = useState<string | null>(null);
 
   // Chest System State
   const [activeChest, setActiveChest] = useState<ChestConfig | null>(null);
@@ -97,6 +115,61 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Cargar paquetes de monedas reales desde la tienda
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      getCoinsOffering().then((pkgs) => {
+        if (pkgs.length > 0) setCoinsPackages(pkgs);
+      });
+    }
+  }, []);
+
+  const getUserId = () => {
+    const user = getCurrentUser();
+    return user?.email ? encodeEmailKey(user.email) : "guest";
+  };
+
+  const handleBuyCoinsPackage = async (productId: string, pkg?: PurchasesPackage) => {
+    if (buyingPackageId) return; // evitar doble tap
+    setBuyingPackageId(productId);
+    setIapError(null);
+    setIapSuccess(null);
+    try {
+      const target = pkg ?? (coinsPackages.find((p) => p.identifier === productId || p.product?.identifier === productId) ?? ({ identifier: productId } as PurchasesPackage));
+      const result = await purchaseCoins(getUserId(), target);
+      if (result.success) {
+        const added = result.coinsAdded ? result.coinsAdded.toLocaleString() : "";
+        setIapSuccess(`¡Listo! Se acreditaron +${added} monedas.`);
+        setTimeout(() => setIapSuccess(null), 4000);
+      } else if (!result.cancelled) {
+        setIapError(result.error ?? "No se pudo completar la compra.");
+      }
+    } catch {
+      setIapError("Error inesperado. Intenta de nuevo.");
+    } finally {
+      setBuyingPackageId(null);
+    }
+  };
+
+  const handleRestoreCoins = async () => {
+    setRestoring(true);
+    setIapError(null);
+    setIapSuccess(null);
+    try {
+      const restored = await restorePurchases(getUserId());
+      if (restored) {
+        setIapSuccess("¡Compras restauradas con éxito!");
+        setTimeout(() => setIapSuccess(null), 4000);
+      } else {
+        setIapError("No se encontraron compras anteriores para restaurar.");
+      }
+    } catch {
+      setIapError("Error al restaurar compras.");
+    } finally {
+      setRestoring(false);
+    }
+  };
 
   const formatRemaining = (ms: number) => {
     const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -662,6 +735,7 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
           <div className="grid grid-cols-2 gap-3">
             {[
               {
+                productId: PRODUCT_IDS.COINS_500,
                 coins: 500,
                 price: "$0.99",
                 bonus: null,
@@ -669,6 +743,7 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
                 ring: "ring-emerald-500/50",
               },
               {
+                productId: PRODUCT_IDS.COINS_1200,
                 coins: 1200,
                 price: "$1.99",
                 bonus: "¡15% Extra!",
@@ -676,6 +751,7 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
                 ring: "ring-indigo-500/50",
               },
               {
+                productId: PRODUCT_IDS.COINS_2500,
                 coins: 2500,
                 price: "$3.99",
                 bonus: "¡25% Extra!",
@@ -683,37 +759,75 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
                 ring: "ring-fuchsia-500/50",
               },
               {
+                productId: PRODUCT_IDS.COINS_6500,
                 coins: 6500,
                 price: "$9.99",
                 bonus: "¡Mejor Valor!",
                 gradient: "from-yellow-400/20 to-amber-700/40",
                 ring: "ring-[color:var(--brand-gold)] shadow-[0_0_20px_rgba(255,215,0,0.3)]",
               },
-            ].map((pack, idx) => (
-              <button
-                key={idx}
-                className={`relative flex flex-col items-center justify-center p-4 rounded-3xl bg-gradient-to-br ${pack.gradient} ring-1 ${pack.ring} border-t-2 border-white/20 active:scale-95 transition-transform overflow-hidden group`}
-              >
-                <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                {pack.bonus && (
-                  <span className="absolute top-0 left-0 w-full bg-red-600 text-[9px] font-black uppercase tracking-wider py-0.5 shadow-md z-10">
-                    {pack.bonus}
+            ].map((pack, idx) => {
+              // Si ya cargamos paquetes reales de la tienda, usar su precio
+              const nativePkg = coinsPackages.find(
+                (p) => p.identifier === pack.productId || p.product?.identifier === pack.productId
+              );
+              const displayPrice = nativePkg ? nativePkg.product.priceString : pack.price;
+              const isBuying = buyingPackageId === pack.productId;
+
+              return (
+                <button
+                  key={idx}
+                  disabled={!!buyingPackageId || restoring}
+                  onClick={() => handleBuyCoinsPackage(pack.productId, nativePkg)}
+                  className={`relative flex flex-col items-center justify-center p-4 rounded-3xl bg-gradient-to-br ${pack.gradient} ring-1 ${pack.ring} border-t-2 border-white/20 active:scale-95 transition-transform overflow-hidden group disabled:opacity-60`}
+                >
+                  <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {pack.bonus && (
+                    <span className="absolute top-0 left-0 w-full bg-red-600 text-[9px] font-black uppercase tracking-wider py-0.5 shadow-md z-10">
+                      {pack.bonus}
+                    </span>
+                  )}
+                  <CoinAnimation
+                    className={`w-12 h-12 mt-2 drop-shadow-xl ${
+                      pack.coins > 2000 ? "animate-pulse" : ""
+                    }`}
+                  />
+                  <span className="font-black text-xl text-white drop-shadow-md mt-1">
+                    {pack.coins.toLocaleString()}
                   </span>
-                )}
-                <CoinAnimation
-                  className={`w-12 h-12 mt-2 drop-shadow-xl ${
-                    pack.coins > 2000 ? "animate-pulse" : ""
-                  }`}
-                />
-                <span className="font-black text-xl text-white drop-shadow-md mt-1">
-                  {pack.coins}
-                </span>
-                <span className="mt-2 bg-white text-black font-extrabold text-sm px-4 py-1.5 rounded-full shadow-lg">
-                  {pack.price}
-                </span>
-              </button>
-            ))}
+                  <span className="mt-2 bg-white text-black font-extrabold text-sm px-4 py-1.5 rounded-full shadow-lg">
+                    {isBuying ? "..." : displayPrice}
+                  </span>
+                </button>
+              );
+            })}
           </div>
+
+          {/* Mensajes de estado IAP */}
+          {iapSuccess && (
+            <p className="text-center text-xs text-emerald-400 font-bold mt-3 px-4 animate-fade-in">
+              {iapSuccess}
+            </p>
+          )}
+          {iapError && (
+            <p className="text-center text-xs text-red-400 font-semibold mt-3 px-4">{iapError}</p>
+          )}
+
+          {/* Restaurar compras */}
+          <button
+            type="button"
+            onClick={handleRestoreCoins}
+            disabled={!!buyingPackageId || restoring}
+            className="w-full mt-3 py-2 text-xs text-white/40 hover:text-white/70 transition flex items-center justify-center gap-1.5 disabled:opacity-30"
+          >
+            <RotateCcw className="w-3 h-3" />
+            {restoring ? "Restaurando..." : "Restaurar compras anteriores"}
+          </button>
+
+          {/* Aviso legal */}
+          <p className="text-center text-[10px] text-white/25 leading-relaxed px-4 mt-1">
+            Las monedas son moneda virtual. No tienen valor en dinero real ni pueden canjearse por efectivo.
+          </p>
         </section>
 
       </main>

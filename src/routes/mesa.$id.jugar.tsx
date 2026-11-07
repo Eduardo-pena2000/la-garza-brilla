@@ -37,8 +37,8 @@ export interface MesaWinner {
 }
 export interface PlayerGameSession {
   name: string;
-  role: "host" | "guest";
-  status?: "active" | "disconnected";
+  role: "host" | "guest" | "spectator";
+  status?: "active" | "disconnected" | "spectator";
   botActive?: boolean;
   disconnectedAt?: number;
   tablas?: Tabla[];
@@ -384,6 +384,25 @@ function JugarPage() {
     };
   }, [id, isHost, userName]);
 
+  const deck = mesa?.deck || [];
+  const drawnIdx = mesa?.drawnIdx ?? -1;
+  const isGameStarted = drawnIdx >= 0;
+
+  // Determinar si entra como espectador:
+  // Si la partida ya está en juego (drawnIdx >= 0), y el usuario no estaba registrado previamente como jugador activo
+  const isSpectator = useMemo(() => {
+    if (!mesa) return false;
+    const userPlayer = mesa.players?.[userName];
+    if (userPlayer?.role === "spectator" || (userPlayer?.status as string) === "spectator") {
+      return true;
+    }
+    const hadSession = Boolean(userPlayer);
+    if (!hadSession && mesa.status === "en-juego" && drawnIdx >= 0 && !isHost) {
+      return true;
+    }
+    return false;
+  }, [mesa, userName, drawnIdx, isHost]);
+
   // Keep-alive presence & bot registration: si el jugador se desconecta, el bot toma el control
   useEffect(() => {
     if (!id || !userName || tablasActivas.length === 0) return;
@@ -421,24 +440,6 @@ function JugarPage() {
       discRef.cancel();
     };
   }, [id, userName, isHost, tablasActivas, isSpectator]);
-
-  const deck = mesa?.deck || [];
-  const drawnIdx = mesa?.drawnIdx ?? -1;
-  const isGameStarted = drawnIdx >= 0;
-
-  // Determinar si entra como espectador:
-  // Si la partida ya está en juego (drawnIdx >= 0), y el usuario no estaba registrado previamente como jugador activo
-  const isSpectator = useMemo(() => {
-    if (!mesa) return false;
-    if (mesa.players?.[userName]?.role === "spectator" || mesa.players?.[userName]?.status === "spectator") {
-      return true;
-    }
-    const hadSession = Boolean(mesa.players?.[userName] && mesa.players[userName].status !== "spectator");
-    if (!hadSession && mesa.status === "en-juego" && drawnIdx >= 0 && !isHost) {
-      return true;
-    }
-    return false;
-  }, [mesa, userName, drawnIdx, isHost]);
 
   // Elección del active caller (Host Failover):
   // Si el host se desconecta, el primer invitado conectado toma el control de avanzar las cartas
@@ -834,17 +835,18 @@ function JugarPage() {
   const [awardedWinnerTimestamp, setAwardedWinnerTimestamp] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!mesa?.winner) return;
-    if (awardedWinnerTimestamp === mesa.winner.timestamp) return;
+    const currentWinner = mesa?.winner;
+    if (!currentWinner) return;
+    if (awardedWinnerTimestamp === currentWinner.timestamp) return;
 
-    setAwardedWinnerTimestamp(mesa.winner.timestamp);
+    setAwardedWinnerTimestamp(currentWinner.timestamp);
 
     // Si el jugador local resultó ganador (por bot o al azar) y no ha cobrado
-    if (mesa.winner.name === userName && mesa.winner.prize > 0 && !won) {
-      setCoins((prev) => prev + mesa.winner.prize);
+    if (currentWinner.name === userName && currentWinner.prize > 0 && !won) {
+      setCoins((prev) => prev + currentWinner.prize);
       if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
       if (settings.vibration && navigator.vibrate) navigator.vibrate([500, 200, 500]);
-    } else if (mesa.winner.name !== userName) {
+    } else if (currentWinner.name !== userName) {
       if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
     }
   }, [mesa?.winner, userName, won, awardedWinnerTimestamp, settings.effects, settings.vibration]);

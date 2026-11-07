@@ -30,6 +30,8 @@ import { BrandBackground } from "@/components/BrandBackground";
 import { VipSubscriptionModal } from "@/components/VipSubscriptionModal";
 import { ref, push, set, onValue, remove, update } from "firebase/database";
 import { database } from "@/lib/firebase";
+import { checkVipStatus } from "@/lib/purchases";
+import { getCurrentUser, encodeEmailKey } from "@/lib/auth";
 
 export const Route = createFileRoute("/crear-sala-vip")({
   head: () => ({
@@ -113,7 +115,7 @@ function CrearSalaVipPage() {
   const [myVipRooms, setMyVipRooms] = useState<any[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(true);
 
-  // Check VIP status
+  // Check VIP status (Firebase RTDB como fuente de verdad, localStorage como cache offline)
   useEffect(() => {
     const checkStatus = () => {
       try {
@@ -124,6 +126,13 @@ function CrearSalaVipPage() {
       } catch {
         /* ignore */
       }
+
+      // Re-verificar contra Firebase RTDB / RevenueCat
+      const user = getCurrentUser();
+      const userId = user?.email ? encodeEmailKey(user.email) : undefined;
+      checkVipStatus(userId).then((active) => {
+        setIsVip(active);
+      }).catch(() => {});
     };
 
     checkStatus();
