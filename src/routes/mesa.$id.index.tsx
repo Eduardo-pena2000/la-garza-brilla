@@ -328,9 +328,9 @@ function MesaPage() {
       const initialDeck = shuffleCards(DECK.map((c) => c.n));
       await update(mesaRef, {
         status: "en-juego",
-        serverPaused: false,
+        serverPaused: true,
         deck: initialDeck,
-        drawnIdx: 0,
+        drawnIdx: -1,
         winner: null,
       });
       navigate({ to: "/mesa/$id/jugar", params: { id: mesa.id } });

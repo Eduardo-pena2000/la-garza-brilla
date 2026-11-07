@@ -421,7 +421,9 @@ function JugarPage() {
   const isGameStarted = drawnIdx >= 0;
 
   // Determinar si entra como espectador:
-  // Solo si el usuario explícitamente tiene rol de espectador o si la sala tiene whitelist y no está incluido
+  // 1. Si el usuario explícitamente tiene rol de espectador
+  // 2. Si la sala tiene whitelist y no está incluido
+  // 3. Si la ronda YA está en curso (drawnIdx >= 0) y el usuario entra nuevo sin haber estado en el lobby
   const isSpectator = useMemo(() => {
     if (!mesa) return false;
     const userPlayer = mesa.players?.[userName];
@@ -434,8 +436,13 @@ function JugarPage() {
       );
       if (!allowed) return true;
     }
+    const wasInLobby = typeof window !== "undefined" && localStorage.getItem(`garza:registered:${id}`) === "true";
+    const hadActiveSession = Boolean(userPlayer && userPlayer.status !== "spectator");
+    if (!wasInLobby && !hadActiveSession && mesa.status === "en-juego" && drawnIdx >= 0 && !isHost) {
+      return true;
+    }
     return false;
-  }, [mesa, userName, isHost]);
+  }, [mesa, userName, isHost, drawnIdx, id]);
 
   // Keep-alive presence & bot registration: si el jugador se desconecta, el bot toma el control
   useEffect(() => {
@@ -506,16 +513,6 @@ function JugarPage() {
       setShowTutorial(false);
     }
   }, [drawnIdx, mesa?.status]);
-
-  // Transition from tutorial to first card
-  useEffect(() => {
-    if (isCaller && drawnIdx === -1 && mesa?.status === "en-juego" && !mesa?.serverPaused && !mesa?.winner) {
-      const timer = setTimeout(() => {
-        update(ref(database, `mesas/${id}`), { drawnIdx: 0 }).catch(() => {});
-      }, speedFor(mesa.mode));
-      return () => clearTimeout(timer);
-    }
-  }, [isCaller, drawnIdx, mesa?.status, mesa?.serverPaused, mesa?.mode, mesa?.winner, id]);
 
   // Desbloqueo del contexto de audio en Safari/iOS en la primera interacción táctil
   useEffect(() => {
@@ -1870,10 +1867,13 @@ function JugarPage() {
                 )}
               </div>
             ) : (
-              <div className="relative w-full h-full bg-gradient-to-br from-red-700 to-red-900 border border-amber-400/50 flex flex-col items-center justify-center p-1 text-center shadow-md">
+              <div className="relative w-full h-full bg-gradient-to-br from-red-700 via-red-800 to-amber-900 border border-amber-400/50 flex flex-col items-center justify-center p-1 text-center shadow-md">
                 <span className="text-2xl leading-none mb-1">🎴</span>
-                <span className="text-[8px] font-black uppercase text-white/80 leading-tight">
-                  {mesa?.status === "en-juego" ? "Preparando" : "En espera"}
+                <span className="text-[9px] font-black uppercase text-amber-300 leading-tight">
+                  ¡Corre y se va!
+                </span>
+                <span className="text-[8px] text-white/80 leading-none mt-1 font-medium">
+                  {isHost ? "Presiona Iniciar" : "Esperando al anfitrión"}
                 </span>
               </div>
             )}
@@ -2057,14 +2057,25 @@ function JugarPage() {
             <button
               type="button"
               onClick={() => {
-                const nextPaused = !paused;
-                setPaused(nextPaused);
-                update(ref(database, `mesas/${id}`), { serverPaused: nextPaused }).catch(() => {});
+                if (drawnIdx < 0) {
+                  const newDeck = mesa?.deck && mesa.deck.length > 0 ? mesa.deck : shuffle(DECK.map((c) => c.n));
+                  update(ref(database, `mesas/${id}`), {
+                    status: "en-juego",
+                    serverPaused: false,
+                    deck: newDeck,
+                    drawnIdx: 0,
+                  }).catch(() => {});
+                  setPaused(false);
+                } else {
+                  const nextPaused = !paused;
+                  setPaused(nextPaused);
+                  update(ref(database, `mesas/${id}`), { serverPaused: nextPaused }).catch(() => {});
+                }
               }}
               className="bg-[color:var(--brand-cyan)] w-[42px] h-[42px] shrink-0 rounded-full flex items-center justify-center shadow-inner border border-[color:var(--brand-cyan)] active:scale-95 transition-transform cursor-pointer"
-              title={paused ? "Reanudar" : "Pausar"}
+              title={paused || drawnIdx < 0 ? "Comenzar a vocear cartas" : "Pausar"}
             >
-              {paused ? (
+              {paused || drawnIdx < 0 ? (
                 <Play className="w-5 h-5 text-[color:var(--brand-navy-deep)] fill-[color:var(--brand-navy-deep)] ml-1" />
               ) : (
                 <Pause className="w-5 h-5 text-[color:var(--brand-navy-deep)] fill-[color:var(--brand-navy-deep)]" />
@@ -2089,10 +2100,10 @@ function JugarPage() {
               className={`flex-1 text-[color:var(--brand-navy-deep)] font-extrabold py-3 rounded-full shadow-md text-sm sm:text-base tracking-wide transition-transform ${
                 mesa?.status === "en-juego" && drawnIdx >= 0
                   ? "bg-white/20 text-white/50 cursor-not-allowed"
-                  : "bg-[color:var(--brand-gold)] shadow-[0_0_15px_rgba(255,215,0,0.4)] active:scale-95 cursor-pointer"
+                  : "bg-[color:var(--brand-gold)] shadow-[0_0_20px_rgba(255,215,0,0.5)] animate-pulse active:scale-95 cursor-pointer"
               }`}
             >
-              {mesa?.status !== "en-juego" || drawnIdx < 0 ? "INICIAR" : "Corre y se va corriendo"}
+              {drawnIdx < 0 ? "¡CORRE Y SE VA CORRIENDO!" : "Corre y se va corriendo..."}
             </button>
           </div>
         )}
