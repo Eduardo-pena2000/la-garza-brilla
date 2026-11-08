@@ -438,26 +438,55 @@ function JugarPage() {
     if (drawnIdx < 0 || Boolean(mesa.winner)) {
       return false;
     }
-    const userPlayer = mesa.players?.[userName];
-    if (userPlayer?.role === "spectator") {
-      return true;
-    }
-    if (mesa.whitelistOnly && mesa.registeredPlayers && !isHost) {
+    if (isHost) return false;
+
+    if (mesa.whitelistOnly && mesa.registeredPlayers) {
       const allowed = mesa.registeredPlayers.some(
         (p) => p.name.trim().toLowerCase() === userName.trim().toLowerCase()
       );
       if (!allowed) return true;
     }
+
     const wasInLobby = typeof window !== "undefined" && (
       sessionStorage.getItem(`garza:registered:${id}`) === "true" ||
       localStorage.getItem(`garza:registered:${id}`) === "true"
     );
-    const hadActiveSession = Boolean(userPlayer && userPlayer.status !== "spectator");
-    if (!wasInLobby && !hadActiveSession && isGameActive && !isHost) {
+
+    // Si ya estaba en la sala antes de iniciar o ya jugó la ronda previa, es jugador activo
+    if (wasInLobby) {
+      return false;
+    }
+
+    const userPlayer = mesa.players?.[userName];
+    if (userPlayer?.role === "spectator" || userPlayer?.status === "spectator") {
+      return true;
+    }
+
+    const hadActiveSession = Boolean(userPlayer && userPlayer.status === "active");
+    if (!wasInLobby && !hadActiveSession && isGameActive) {
       return true;
     }
     return false;
   }, [mesa, userName, isHost, drawnIdx, id, isGameActive]);
+
+  // Transición automática: al terminar la ronda o entre rondas, los espectadores se promueven a jugadores activos
+  useEffect(() => {
+    if (!id || !userName) return;
+    if (drawnIdx < 0 || Boolean(mesa?.winner)) {
+      try {
+        localStorage.setItem(`garza:registered:${id}`, "true");
+        sessionStorage.setItem(`garza:registered:${id}`, "true");
+      } catch {}
+
+      const userPlayer = mesa?.players?.[userName];
+      if (userPlayer && (userPlayer.role === "spectator" || userPlayer.status === "spectator")) {
+        update(ref(database, `mesas/${id}/players/${userName}`), {
+          role: isHost ? "host" : "guest",
+          status: "active",
+        }).catch(() => {});
+      }
+    }
+  }, [drawnIdx, mesa?.winner, id, userName, isHost, mesa?.players]);
 
   // Keep-alive presence & bot registration: si el jugador se desconecta, el bot toma el control
   useEffect(() => {
@@ -558,42 +587,49 @@ function JugarPage() {
     };
   }, []);
 
-  // Pre-carga anticipada de audios de las próximas 6 cartas para evitar desfase en iOS/móvil
+  // Pre-carga anticipada de audios de las próximas 8 cartas para evitar desfase en iOS/móvil
   useEffect(() => {
     if (!deck || deck.length === 0 || !settings.audio) return;
     const start = Math.max(0, drawnIdx);
-    const nextBatch = deck.slice(start, start + 6);
+    const nextBatch = deck.slice(start, start + 8);
     const basePath = settings.voice === "default" ? "/audio/cards" : `/audio/cards/${settings.voice}`;
     nextBatch.forEach((c) => {
       if (!audioPoolRef.current.has(c)) {
-        const pre = new Audio(`${basePath}/b${c}.mp3`);
-        pre.preload = "auto";
-        audioPoolRef.current.set(c, pre);
+        try {
+          const pre = new Audio(`${basePath}/b${c}.mp3`);
+          pre.preload = "auto";
+          audioPoolRef.current.set(c, pre);
+        } catch {}
       }
     });
   }, [deck, drawnIdx, settings.audio, settings.voice]);
 
-  // Reproducción de audio en tiempo real y sincronizada
+  // Reproducción de audio en tiempo real y sincronizada (optimizada para iOS y baja latencia)
   const currentCard = deck[drawnIdx];
   useEffect(() => {
     if (currentCard !== undefined && settings.audio && drawnIdx >= 0) {
       const basePath = settings.voice === "default" ? "/audio/cards" : `/audio/cards/${settings.voice}`;
-      if (cardAudioRef.current) {
-        try {
-          cardAudioRef.current.pause();
-          cardAudioRef.current.currentTime = 0;
-        } catch {}
+      const audioUrl = `${basePath}/b${currentCard}.mp3`;
+
+      let player = cardAudioRef.current;
+      if (!player) {
+        player = new Audio();
+        cardAudioRef.current = player;
       }
-      let audio = audioPoolRef.current.get(currentCard);
-      if (!audio) {
-        audio = new Audio(`${basePath}/b${currentCard}.mp3`);
-        audioPoolRef.current.set(currentCard, audio);
-      }
-      cardAudioRef.current = audio;
-      audio.currentTime = 0;
-      const playPromise = audio.play();
+
+      try {
+        player.pause();
+      } catch {}
+      player.src = audioUrl;
+      player.currentTime = 0;
+      const playPromise = player.play();
       if (playPromise !== undefined) {
-        playPromise.catch(() => {});
+        playPromise.catch(() => {
+          try {
+            const fallback = new Audio(audioUrl);
+            fallback.play().catch(() => {});
+          } catch {}
+        });
       }
     }
   }, [currentCard, drawnIdx, settings.audio, settings.voice]);
@@ -784,8 +820,11 @@ function JugarPage() {
     if (mesa.isVip) {
       await doRestart();
     } else {
-      setPendingActionAfterAd(() => () => doRestart());
-      setShowAd(true);
+      if (showAd) {
+        setPendingActionAfterAd(() => () => doRestart());
+      } else {
+        await doRestart();
+      }
     }
   }
 
@@ -975,6 +1014,20 @@ function JugarPage() {
       if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
     }
   }, [mesa?.winner, userName, won, awardedWinnerTimestamp, settings.effects, settings.vibration]);
+
+  // Mostrar anuncio entre rondas automáticamente en salas regulares (cero anuncios en VIP)
+  const lastAdTimestampRef = useRef<number>(0);
+  useEffect(() => {
+    if (!mesa?.winner || mesa?.isVip) return;
+    const ts = mesa.winner.timestamp || 1;
+    if (lastAdTimestampRef.current !== ts) {
+      lastAdTimestampRef.current = ts;
+      const timer = setTimeout(() => {
+        setShowAd(true);
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [mesa?.winner, mesa?.isVip]);
 
   // Contador de 60s para iniciar la siguiente ronda automáticamente
   const [secondsLeft, setSecondsLeft] = useState<number>(60);

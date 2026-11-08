@@ -55,9 +55,10 @@ interface Tabla {
 
 interface Player {
   name: string;
-  role: "host" | "guest";
-  tablesCount: number;
-  ready: boolean;
+  role: "host" | "guest" | "spectator";
+  tablesCount?: number;
+  ready?: boolean;
+  status?: "active" | "disconnected" | "spectator";
   isVip?: boolean;
 }
 
@@ -100,6 +101,10 @@ interface Mesa {
   registeredPlayers?: RegisteredPlayer[];
   rounds?: VipRound[];
   currentRound?: number;
+  deck?: number[];
+  drawnIdx?: number;
+  winner?: any;
+  serverPaused?: boolean;
 }
 
 const MESAS_KEY = "garza:mesas";
@@ -215,16 +220,23 @@ function MesaPage() {
   // Register player in room
   useEffect(() => {
     if (mesa && myName && id) {
+      const isGameAlreadyActive = Boolean(
+        mesa.status === "en-juego" && (mesa.drawnIdx ?? -1) >= 0 && !mesa.winner
+      );
+
       const playerRef = ref(database, `mesas/${id}/players/${myName}`);
       update(playerRef, {
         name: myName,
-        role: mesa.host === myName ? "host" : "guest",
-        status: "active",
+        role: isGameAlreadyActive ? "spectator" : (mesa.host === myName ? "host" : "guest"),
+        status: isGameAlreadyActive ? "spectator" : "active",
       }).catch(() => { });
 
-      try {
-        localStorage.setItem(`garza:registered:${id}`, "true");
-      } catch { }
+      if (!isGameAlreadyActive) {
+        try {
+          localStorage.setItem(`garza:registered:${id}`, "true");
+          sessionStorage.setItem(`garza:registered:${id}`, "true");
+        } catch { }
+      }
 
       // En el lobby, si el jugador cierra la ventana antes de que inicie la partida, se limpia su lugar
       let discRef: any = null;
@@ -243,7 +255,7 @@ function MesaPage() {
         if (roomDiscRef) roomDiscRef.cancel();
       };
     }
-  }, [mesa?.id, myName, id, mesa?.host, mesa?.status]);
+  }, [mesa?.id, myName, id, mesa?.host, mesa?.status, mesa?.drawnIdx, mesa?.winner, isHostInLobby]);
 
   // Auto-generate boards for guest if they don't have matching boards
   useEffect(() => {

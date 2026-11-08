@@ -7,7 +7,7 @@ interface BrandLogoProps {
 export function BrandLogo({ size = 160, className = "" }: BrandLogoProps) {
   return (
     <img
-      src="/logo-garza.png?v=3"
+      src="/logo-garza.png?v=6"
       alt="Lotería La Garza"
       width={size}
       height={size}
