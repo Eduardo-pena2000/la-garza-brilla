@@ -1,3 +1,5 @@
+import logoGarza from "@/assets/logo-garza.png";
+
 interface BrandLogoProps {
   size?: number;
   className?: string;
@@ -7,7 +9,7 @@ interface BrandLogoProps {
 export function BrandLogo({ size = 160, className = "" }: BrandLogoProps) {
   return (
     <img
-      src="/logo-garza.png?v=6"
+      src={logoGarza}
       alt="Lotería La Garza"
       width={size}
       height={size}

@@ -14,6 +14,7 @@ import featureJoin from "@/assets/feature-join.png";
 import featureDecks from "@/assets/feature-decks.png";
 import featureShop from "@/assets/feature-shop.png";
 import colMuertos from "@/assets/col-muertos.jpg";
+import logoGarza from "@/assets/logo-garza.png";
 import { VipSubscriptionModal } from "@/components/VipSubscriptionModal";
 import { JoinTableSelectionModal } from "@/components/JoinTableSelectionModal";
 import { CoinAnimation } from "@/components/CoinAnimation";
@@ -453,7 +454,7 @@ export function InicioView({
       {/* Logo */}
       <div className="relative mx-auto -mt-6 flex w-36 items-center justify-center z-10 shrink-0">
         <img
-          src="/logo-garza.png?v=6"
+          src={logoGarza}
           alt="Logo Lotería La Garza"
           width={1920}
           height={1920}
