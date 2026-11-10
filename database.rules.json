@@ -2,15 +2,15 @@
   "rules": {
     "users": {
       "$userId": {
-        ".read": true,
-        ".write": true,
+        ".read": "auth != null",
+        ".write": "auth != null",
         ".validate": "newData.hasChildren(['id', 'email', 'name']) && !newData.hasChild('password')"
       }
     },
     "mesas": {
-      ".read": true,
+      ".read": "auth != null",
       "$mesaId": {
-        ".write": true,
+        ".write": "auth != null",
         "players": {
           ".indexOn": ["role", "status"]
         }

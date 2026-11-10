@@ -11,7 +11,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 import { FloatingMatchCountdown } from "@/components/FloatingMatchCountdown";
 import { initPurchases, checkVipStatus } from "@/lib/purchases";
-import { getCurrentUser, encodeEmailKey } from "@/lib/auth";
+import { getCurrentUser, encodeEmailKey, ensureAuthSession } from "@/lib/auth";
 
 import appCss from "../styles.css?url";
 
@@ -117,6 +117,9 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   useEffect(() => {
+    // Asegurar sesión autenticada en Firebase (anónima o registrada)
+    ensureAuthSession();
+
     // Only clear storage if explicitly requested via query param ?reset=1
     try {
       if (typeof window !== "undefined" && window.location.search.includes("reset=1")) {
