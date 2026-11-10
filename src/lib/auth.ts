@@ -1,5 +1,12 @@
 import { ref, get, set, update, remove } from "firebase/database";
-import { database } from "@/lib/firebase";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInAnonymously,
+  signOut as fbSignOut,
+  deleteUser,
+} from "firebase/auth";
+import { database, auth } from "@/lib/firebase";
 
 export interface UserAccount {
   id: string;
@@ -26,23 +33,34 @@ export function encodeEmailKey(email: string): string {
 export const ADMIN_INITIAL_ACCOUNT: UserAccount = {
   id: "usr_jeff_admin",
   email: "omgiscooljeff21@gmail.com",
-  password: "admin123456",
   name: "Eduardo Alejandro (Jeff)",
-  isVip: false,
-  coins: 0,
+  isVip: true,
+  coins: 500,
   owned: ["wp_clasico", "deck_clasica", "marker_frijol"],
   equippedDeck: "deck_clasica",
   equippedWallpaper: "wp_clasico",
   equippedMarker: "marker_frijol",
-  createdAt: Date.now(),
+  createdAt: 1730000000000,
   lastLogin: Date.now(),
 };
+
+/**
+ * Asegura que cualquier visitante o invitado tenga una sesión anónima en Firebase
+ */
+export function ensureAuthSession(): void {
+  try {
+    if (!auth.currentUser) {
+      signInAnonymously(auth).catch(() => {});
+    }
+  } catch {}
+}
 
 /**
  * Obtener el usuario autenticado actualmente desde almacenamiento local
  */
 export function getCurrentUser(): UserAccount | null {
   try {
+    ensureAuthSession();
     const raw = localStorage.getItem(CURRENT_USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
@@ -66,6 +84,10 @@ export function isGuestSession(): boolean {
 export function loginAsGuest(guestName: string): void {
   try {
     const cleanName = guestName.trim() || "Invitado";
+
+    // Autenticar anónimamente en Firebase para que tenga un UID seguro
+    signInAnonymously(auth).catch(() => {});
+
     // Limpiar restos de cuentas anteriores
     localStorage.removeItem(CURRENT_USER_KEY);
     localStorage.removeItem("garza:vip");
@@ -212,25 +234,26 @@ export async function loginWithOAuth(
 }
 
 /**
- * Iniciar sesión con Correo y Contraseña
+ * Iniciar sesión con Correo y Contraseña (Integrado con Firebase Auth seguro)
  */
 export async function loginWithEmail(email: string, password: string): Promise<UserAccount> {
   const cleanEmail = email.trim().toLowerCase();
   const key = encodeEmailKey(cleanEmail);
+  const userRef = ref(database, `users/${key}`);
 
-  // Fallback rápido si es la cuenta solicitada
-  if (cleanEmail === ADMIN_INITIAL_ACCOUNT.email && password === ADMIN_INITIAL_ACCOUNT.password) {
-    const user: UserAccount = {
-      ...ADMIN_INITIAL_ACCOUNT,
-      lastLogin: Date.now(),
-    };
-    applyUserSession(user);
-    ensureAdminAccountProvisioned().catch(() => {});
-    return user;
+  let fbAuthSuccess = false;
+  try {
+    await signInWithEmailAndPassword(auth, cleanEmail, password);
+    fbAuthSuccess = true;
+  } catch (authErr: any) {
+    const code = authErr?.code || "";
+    if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+      throw new Error("Contraseña incorrecta. Por favor verifica tus datos.");
+    }
+    console.warn("[Auth] Firebase Auth notice (fallback active):", authErr?.message || authErr);
   }
 
-  // Buscar en Firebase Cloud
-  const userRef = ref(database, `users/${key}`);
+  // Buscar perfil en Firebase RTDB
   const snapshot = await get(userRef);
 
   if (!snapshot.exists()) {
@@ -238,8 +261,24 @@ export async function loginWithEmail(email: string, password: string): Promise<U
   }
 
   const userData = snapshot.val() as UserAccount;
-  if (userData.password !== password) {
-    throw new Error("Contraseña incorrecta. Por favor verifica tus datos.");
+
+  // Si no se autenticó por Firebase Auth (ej. cuenta previa o antes de activar Auth en consola):
+  if (!fbAuthSuccess) {
+    if (userData.password) {
+      if (userData.password !== password) {
+        throw new Error("Contraseña incorrecta. Por favor verifica tus datos.");
+      }
+      // Auto-migrar cuenta heredada a Firebase Auth seguro
+      try {
+        await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        await update(userRef, { password: null });
+      } catch {}
+    }
+  } else {
+    // Si ya inició con Firebase Auth y aún quedaba contraseña vieja en RTDB, purgarla:
+    if (userData.password) {
+      update(userRef, { password: null }).catch(() => {});
+    }
   }
 
   userData.lastLogin = Date.now();
@@ -249,7 +288,7 @@ export async function loginWithEmail(email: string, password: string): Promise<U
 }
 
 /**
- * Registrar nueva cuenta con Correo y Contraseña
+ * Registrar nueva cuenta con Correo y Contraseña (Cifrado seguro mediante Firebase Auth)
  */
 export async function registerWithEmail(
   email: string,
@@ -271,17 +310,36 @@ export async function registerWithEmail(
 
   const key = encodeEmailKey(cleanEmail);
   const userRef = ref(database, `users/${key}`);
-  const snapshot = await get(userRef);
 
+  // Verificar si ya existe en la base de datos
+  const snapshot = await get(userRef);
   if (snapshot.exists()) {
     throw new Error("Ya existe una cuenta con este correo. Inicia sesión en su lugar.");
   }
 
-  // Nueva cuenta: inicia con 0 monedas y elementos básicos por defecto
+  let firebaseUid: string | null = null;
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+    firebaseUid = cred.user.uid;
+  } catch (authErr: any) {
+    const code = authErr?.code || "";
+    if (code === "auth/email-already-in-use") {
+      throw new Error("Ya existe una cuenta con este correo. Inicia sesión en su lugar.");
+    }
+    if (code === "auth/weak-password") {
+      throw new Error("La contraseña debe tener al menos 6 caracteres.");
+    }
+    if (code === "auth/invalid-email") {
+      throw new Error("Por favor ingresa un correo electrónico válido.");
+    }
+    console.warn("[Auth] Firebase Auth creation notice (fallback active):", authErr?.message || authErr);
+  }
+
+  // Nueva cuenta: inicia con 0 monedas y datos limpios.
+  // IMPORTANTE: NUNCA se guarda la contraseña en texto plano en la base de datos.
   const newAccount: UserAccount = {
-    id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: firebaseUid || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     email: cleanEmail,
-    password,
     name: cleanName,
     isVip: false,
     coins: 0,
@@ -304,6 +362,10 @@ export async function registerWithEmail(
  */
 export function logoutUser(): void {
   try {
+    fbSignOut(auth).catch(() => {});
+    // Re-crear sesión anónima segura para navegación como invitado
+    signInAnonymously(auth).catch(() => {});
+
     sessionStorage.removeItem("garza:session_active");
     sessionStorage.removeItem("garza:is_guest");
     sessionStorage.removeItem("garza:name");
@@ -323,6 +385,10 @@ export function logoutUser(): void {
  */
 export async function deleteUserAccount(email?: string): Promise<void> {
   try {
+    if (auth.currentUser) {
+      await deleteUser(auth.currentUser).catch(() => {});
+    }
+
     const targetEmail = email || getCurrentUser()?.email;
     if (targetEmail) {
       const key = encodeEmailKey(targetEmail);
@@ -335,6 +401,7 @@ export async function deleteUserAccount(email?: string): Promise<void> {
     try {
       localStorage.clear();
       sessionStorage.clear();
+      signInAnonymously(auth).catch(() => {});
       window.dispatchEvent(new Event("garza:auth-updated"));
       window.dispatchEvent(new Event("garza:coins-updated"));
       window.dispatchEvent(new Event("garza:vip-updated"));

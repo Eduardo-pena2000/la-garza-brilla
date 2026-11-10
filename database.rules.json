@@ -3,7 +3,8 @@
     "users": {
       "$userId": {
         ".read": true,
-        ".write": true
+        ".write": true,
+        ".validate": "newData.hasChildren(['id', 'email', 'name']) && !newData.hasChild('password')"
       }
     },
     "mesas": {
