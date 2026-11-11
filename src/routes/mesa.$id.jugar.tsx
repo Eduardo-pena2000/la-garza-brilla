@@ -4,7 +4,7 @@ import {
   ArrowLeft, Pause, Play, Settings2, MessageCircle, Users, RotateCcw,
   Timer as TimerIcon, Heart, Image as ImageIcon, Triangle, X, Send,
   Menu, Info, Trophy, Link as LinkIcon, Edit2, Share2, LayoutGrid, Check, CircleDot, Zap, Crown, ShieldCheck,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Sparkles
 } from "lucide-react";
 import { DECK, getCard } from "@/lib/deck";
 import { ref, onValue, update, push, set, onDisconnect, remove } from "firebase/database";
@@ -549,14 +549,58 @@ function JugarPage() {
 
   const isCaller = userName === activeCallerName;
 
-  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialDismissed, setTutorialDismissed] = useState(false);
+  const [introCountdown, setIntroCountdown] = useState(3);
+
   useEffect(() => {
-    if (drawnIdx === -1 && mesa?.status === "en-juego") {
-      setShowTutorial(true);
-    } else {
-      setShowTutorial(false);
+    if (drawnIdx !== -1) {
+      setTutorialDismissed(false);
     }
-  }, [drawnIdx, mesa?.status]);
+  }, [drawnIdx]);
+
+  const showTutorial = drawnIdx === -1 && mesa?.status === "en-juego" && !tutorialDismissed;
+
+  // Conteo regresivo visual cuando drawnIdx === -1
+  useEffect(() => {
+    if (drawnIdx === -1 && mesa?.status === "en-juego" && !mesa?.serverPaused) {
+      setIntroCountdown(3);
+      const interval = setInterval(() => {
+        setIntroCountdown((prev) => Math.max(0, prev - 1));
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [drawnIdx, mesa?.status, mesa?.serverPaused]);
+
+  // Transición automática al primer naipe tras el conteo regresivo de inicio (previene que el juego se quede trabado)
+  useEffect(() => {
+    if (isCaller && drawnIdx === -1 && mesa?.status === "en-juego" && !mesa?.serverPaused && !mesa?.winner) {
+      const timer = setTimeout(() => {
+        const newDeck = mesa?.deck && mesa.deck.length > 0 ? mesa.deck : shuffle(DECK.map((c) => c.n));
+        update(ref(database, `mesas/${id}`), {
+          status: "en-juego",
+          serverPaused: false,
+          deck: newDeck,
+          drawnIdx: 0,
+        }).catch(() => {});
+        setPaused(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isCaller, drawnIdx, mesa?.status, mesa?.serverPaused, mesa?.winner, mesa?.deck, id]);
+
+  const handleStartNow = () => {
+    setTutorialDismissed(true);
+    if (isCaller || isHost) {
+      const newDeck = mesa?.deck && mesa.deck.length > 0 ? mesa.deck : shuffle(DECK.map((c) => c.n));
+      update(ref(database, `mesas/${id}`), {
+        status: "en-juego",
+        serverPaused: false,
+        deck: newDeck,
+        drawnIdx: 0,
+      }).catch(() => {});
+      setPaused(false);
+    }
+  };
 
   // Desbloqueo robusto del contexto de audio en Safari/iOS en la primera interacción táctil
   useEffect(() => {
@@ -745,9 +789,7 @@ function JugarPage() {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {}
     if (interaction && interaction.uid === `${tablaId}-${c}`) {
-      if (!interaction.isScratching) {
-        toggleMark(tablaId, c);
-      }
+      toggleMark(tablaId, c);
       setInteraction(null);
     }
   };
@@ -1189,10 +1231,13 @@ function JugarPage() {
             </div>
           )}
 
-        {/* Tutorial Overlay */}
+        {/* Tutorial / Preparando Ronda Overlay */}
         {showTutorial && (
-          <div className="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm animate-pop-in px-6 pb-20">
-            <div className="relative mb-6">
+          <div
+            onClick={() => setTutorialDismissed(true)}
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/75 backdrop-blur-md animate-pop-in px-6 pb-20 select-none cursor-pointer"
+          >
+            <div className="relative mb-6 pointer-events-none">
               <div className="w-24 h-36 bg-white/20 shadow-2xl border-2 border-white/50 rotate-[-5deg] backdrop-blur-sm" />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="relative animate-scratch-hand z-10 scale-125">
@@ -1201,11 +1246,43 @@ function JugarPage() {
                 </div>
               </div>
             </div>
-            <h3 className="text-[color:var(--brand-gold)] font-black text-2xl uppercase tracking-widest mb-3 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">Ritual de Suerte</h3>
-            <p className="text-white font-bold text-lg leading-snug drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] text-center">
-              Para marcar, presiona tu carta y<br/>
-              <span className="text-[color:var(--brand-cyan)] text-2xl mt-1 block">mueve de lado a lado</span>
+
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 text-xs font-black uppercase tracking-wider mb-2 pointer-events-none">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Iniciando en {introCountdown}s...</span>
+            </div>
+
+            <h3 className="text-[color:var(--brand-gold)] font-black text-2xl uppercase tracking-widest mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] pointer-events-none">
+              Ritual de Suerte
+            </h3>
+            <p className="text-white font-bold text-base leading-snug drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] text-center max-w-xs mb-6 pointer-events-none">
+              Para marcar, toca tu carta o <br/>
+              <span className="text-[color:var(--brand-cyan)] text-xl mt-0.5 block">rasca con tu moneda de lado a lado</span>
             </p>
+
+            <div className="flex flex-col items-center gap-2 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+              {(isHost || isCaller) ? (
+                <button
+                  type="button"
+                  onClick={handleStartNow}
+                  className="w-full py-3.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.5)] active:scale-95 transition-transform cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  ¡Comenzar ahora ({introCountdown}s)!
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setTutorialDismissed(true)}
+                  className="w-full py-3 rounded-full bg-white/20 hover:bg-white/30 text-white font-bold text-sm backdrop-blur active:scale-95 transition-all cursor-pointer"
+                >
+                  ¡Entendido! Comenzando ({introCountdown}s)...
+                </button>
+              )}
+              <span className="text-[11px] text-white/50 text-center pointer-events-none">
+                Toca en cualquier parte para continuar
+              </span>
+            </div>
           </div>
         )}
 

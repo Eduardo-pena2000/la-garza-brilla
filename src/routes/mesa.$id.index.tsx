@@ -341,7 +341,7 @@ function MesaPage() {
       const initialDeck = shuffleCards(DECK.map((c) => c.n));
       await update(mesaRef, {
         status: "en-juego",
-        serverPaused: true,
+        serverPaused: false,
         deck: initialDeck,
         drawnIdx: -1,
         winner: null,
