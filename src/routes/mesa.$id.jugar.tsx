@@ -4,8 +4,9 @@ import {
   ArrowLeft, Pause, Play, Settings2, MessageCircle, Users, RotateCcw,
   Timer as TimerIcon, Heart, Image as ImageIcon, Triangle, X, Send,
   Menu, Info, Trophy, Link as LinkIcon, Edit2, Share2, LayoutGrid, Check, CircleDot, Zap, Crown, ShieldCheck,
-  ChevronLeft, ChevronRight, Sparkles
+  ChevronLeft, ChevronRight, Sparkles, ChevronUp
 } from "lucide-react";
+import logoGarza from "@/assets/logo-garza.png";
 import { DECK, getCard } from "@/lib/deck";
 import { ref, onValue, update, push, set, onDisconnect, remove } from "firebase/database";
 import { database } from "@/lib/firebase";
@@ -50,6 +51,7 @@ interface Mesa {
   id: string; name: string; mode: Mode; size: Size; perPlayer: number; cost?: number;
   tablaIds: string[]; host: string; status: string; deck?: number[];
   drawnIdx?: number; players?: Record<string, PlayerGameSession>; prizePool?: number; serverPaused?: boolean;
+  speed?: number;
   winner?: MesaWinner;
   nextRoundAt?: number;
   isVip?: boolean; isScheduled?: boolean; scheduledDate?: string; scheduledTime?: string;
@@ -90,8 +92,10 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
-function speedFor(mode: Mode): number {
-  return 4000;
+const SPEED_OPTIONS = [2, 3, 4, 5, 6, 8];
+
+function speedFor(mesa?: { speed?: number } | null): number {
+  return (mesa?.speed && mesa.speed >= 1 ? mesa.speed : 4) * 1000;
 }
 
 const MODE_META: Record<Mode, { label: string; hint: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -549,48 +553,26 @@ function JugarPage() {
 
   const isCaller = userName === activeCallerName;
 
-  const [tutorialDismissed, setTutorialDismissed] = useState(false);
-  const [introCountdown, setIntroCountdown] = useState(3);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const timeSecs = mesa?.speed && mesa.speed >= 1 ? mesa.speed : 4;
 
-  useEffect(() => {
-    if (drawnIdx !== -1) {
-      setTutorialDismissed(false);
-    }
-  }, [drawnIdx]);
+  const handleSetSpeed = (newSpeed: number) => {
+    if (!isHost) return;
+    update(ref(database, `mesas/${id}`), { speed: newSpeed }).catch(() => {});
+    setShowSpeedMenu(false);
+  };
 
-  const showTutorial = drawnIdx === -1 && mesa?.status === "en-juego" && !tutorialDismissed;
+  const handleCycleSpeed = () => {
+    if (!isHost) return;
+    const current = mesa?.speed && mesa.speed >= 1 ? mesa.speed : 4;
+    const currentIdx = SPEED_OPTIONS.indexOf(current);
+    const nextSpeed = currentIdx === -1 ? 4 : SPEED_OPTIONS[(currentIdx + 1) % SPEED_OPTIONS.length];
+    handleSetSpeed(nextSpeed);
+  };
 
-  // Conteo regresivo visual cuando drawnIdx === -1
-  useEffect(() => {
-    if (drawnIdx === -1 && mesa?.status === "en-juego" && !mesa?.serverPaused) {
-      setIntroCountdown(3);
-      const interval = setInterval(() => {
-        setIntroCountdown((prev) => Math.max(0, prev - 1));
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [drawnIdx, mesa?.status, mesa?.serverPaused]);
-
-  // Transición automática al primer naipe tras el conteo regresivo de inicio (previene que el juego se quede trabado)
-  useEffect(() => {
-    if (isCaller && drawnIdx === -1 && mesa?.status === "en-juego" && !mesa?.serverPaused && !mesa?.winner) {
-      const timer = setTimeout(() => {
-        const newDeck = mesa?.deck && mesa.deck.length > 0 ? mesa.deck : shuffle(DECK.map((c) => c.n));
-        update(ref(database, `mesas/${id}`), {
-          status: "en-juego",
-          serverPaused: false,
-          deck: newDeck,
-          drawnIdx: 0,
-        }).catch(() => {});
-        setPaused(false);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [isCaller, drawnIdx, mesa?.status, mesa?.serverPaused, mesa?.winner, mesa?.deck, id]);
-
-  const handleStartNow = () => {
-    setTutorialDismissed(true);
-    if (isCaller || isHost) {
+  const handleStartGame = () => {
+    if (!isHost && !isCaller) return;
+    if (drawnIdx < 0) {
       const newDeck = mesa?.deck && mesa.deck.length > 0 ? mesa.deck : shuffle(DECK.map((c) => c.n));
       update(ref(database, `mesas/${id}`), {
         status: "en-juego",
@@ -842,7 +824,7 @@ function JugarPage() {
       deck: newDeck,
       drawnIdx: -1,
       status: "en-juego",
-      serverPaused: false,
+      serverPaused: true,
       winner: null,
       nextRoundAt: null,
       currentRound: nextRound,
@@ -851,7 +833,7 @@ function JugarPage() {
     setMarked(new Set());
     setWon(false);
     setWinDismissed(false);
-    setPaused(false);
+    setPaused(true);
     setActiveModal(null);
   }
 
@@ -901,6 +883,8 @@ function JugarPage() {
     if (!isCaller || !mesa || mesa.status !== "en-juego" || paused || won || mesa.serverPaused || drawnIdx < 0) return;
     if (!mesa.deck || mesa.deck.length === 0 || mesa.winner) return;
     
+    const intervalMs = speedFor(mesa);
+
     const interval = setInterval(() => {
       if (drawnIdx < (mesa.deck?.length || 0) - 1) {
         update(ref(database, `mesas/${id}`), { drawnIdx: drawnIdx + 1 }).catch(() => {});
@@ -931,10 +915,10 @@ function JugarPage() {
           setPaused(true);
         }
       }
-    }, speedFor(mesa.mode));
+    }, intervalMs);
     
     return () => clearInterval(interval);
-  }, [isCaller, mesa?.status, mesa?.serverPaused, mesa?.mode, paused, won, drawnIdx, mesa?.deck?.length, mesa?.winner, mesa?.players, mesa?.prizePool, id]);
+  }, [isCaller, mesa?.status, mesa?.serverPaused, mesa?.mode, mesa?.speed, paused, won, drawnIdx, mesa?.deck?.length, mesa?.winner, mesa?.players, mesa?.prizePool, id]);
 
   // Limpieza automática de la mesa si el anfitrión se fue o ya no quedan jugadores humanos
   useEffect(() => {
@@ -1167,7 +1151,6 @@ function JugarPage() {
     );
   }
 
-  const timeSecs = speedFor(mesa.mode) / 1000;
   const connectedPlayers = mesa.players ? Object.keys(mesa.players) : [mesa.host];
 
   return (
@@ -1231,60 +1214,7 @@ function JugarPage() {
             </div>
           )}
 
-        {/* Tutorial / Preparando Ronda Overlay */}
-        {showTutorial && (
-          <div
-            onClick={() => setTutorialDismissed(true)}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/75 backdrop-blur-md animate-pop-in px-6 pb-20 select-none cursor-pointer"
-          >
-            <div className="relative mb-6 pointer-events-none">
-              <div className="w-24 h-36 bg-white/20 shadow-2xl border-2 border-white/50 rotate-[-5deg] backdrop-blur-sm" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="relative animate-scratch-hand z-10 scale-125">
-                  <div className="text-7xl drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]">👇</div>
-                  <CoinAnimation className="absolute bottom-2 left-1/2 -translate-x-1/2 w-10 h-10 drop-shadow-md rotate-[-15deg]" />
-                </div>
-              </div>
-            </div>
 
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 text-xs font-black uppercase tracking-wider mb-2 pointer-events-none">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Iniciando en {introCountdown}s...</span>
-            </div>
-
-            <h3 className="text-[color:var(--brand-gold)] font-black text-2xl uppercase tracking-widest mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] pointer-events-none">
-              Ritual de Suerte
-            </h3>
-            <p className="text-white font-bold text-base leading-snug drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] text-center max-w-xs mb-6 pointer-events-none">
-              Para marcar, toca tu carta o <br/>
-              <span className="text-[color:var(--brand-cyan)] text-xl mt-0.5 block">rasca con tu moneda de lado a lado</span>
-            </p>
-
-            <div className="flex flex-col items-center gap-2 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
-              {(isHost || isCaller) ? (
-                <button
-                  type="button"
-                  onClick={handleStartNow}
-                  className="w-full py-3.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.5)] active:scale-95 transition-transform cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <Play className="w-4 h-4 fill-current" />
-                  ¡Comenzar ahora ({introCountdown}s)!
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setTutorialDismissed(true)}
-                  className="w-full py-3 rounded-full bg-white/20 hover:bg-white/30 text-white font-bold text-sm backdrop-blur active:scale-95 transition-all cursor-pointer"
-                >
-                  ¡Entendido! Comenzando ({introCountdown}s)...
-                </button>
-              )}
-              <span className="text-[11px] text-white/50 text-center pointer-events-none">
-                Toca en cualquier parte para continuar
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* Floating Messages Overlay */}
         {floatingMsg && !activeModal && (
@@ -2042,10 +1972,16 @@ function JugarPage() {
             </div>
           </div>
 
-          {/* BARAJA A VOCEAR (ARRIBA A LA DERECHA - SOLO LA CARTA CUADRADA) */}
-          <div className="w-[84px] sm:w-[94px] h-[116px] shrink-0 bg-gradient-to-b from-[#1d123d] via-[#120a2a] to-[#0a0518] border-2 border-amber-400 p-1 flex items-center justify-center shadow-[0_4px_20px_rgba(245,158,11,0.25)] relative backdrop-blur-md">
+          {/* BARAJA A VOCEAR (ARRIBA A LA DERECHA - BARAJA VOLTEADA HASTA DARLE CLIC A CORRE Y SE VA) */}
+          <div 
+            onClick={isHost && drawnIdx < 0 ? handleStartGame : undefined}
+            className={`w-[84px] sm:w-[94px] h-[116px] shrink-0 p-1 flex items-center justify-center relative select-none transition-transform ${
+              drawnIdx < 0 && isHost ? "cursor-pointer hover:scale-[1.03] active:scale-95" : ""
+            }`}
+            title={drawnIdx < 0 && isHost ? "Toca para iniciar partida (¡Corre y se va!)" : undefined}
+          >
             {drawn ? (
-              <div className="relative w-full h-full overflow-hidden border border-amber-400/80 shadow-md">
+              <div className="relative w-full h-full overflow-hidden border-2 border-amber-400 bg-gradient-to-b from-[#1d123d] via-[#120a2a] to-[#0a0518] shadow-[0_4px_20px_rgba(245,158,11,0.25)] rounded-sm">
                 <img 
                   src={drawn.image} 
                   alt={drawn.name} 
@@ -2064,14 +2000,52 @@ function JugarPage() {
                 )}
               </div>
             ) : (
-              <div className="relative w-full h-full bg-gradient-to-br from-red-700 via-red-800 to-amber-900 border border-amber-400/50 flex flex-col items-center justify-center p-1 text-center shadow-md">
-                <span className="text-2xl leading-none mb-1">🎴</span>
-                <span className="text-[9px] font-black uppercase text-amber-300 leading-tight">
-                  ¡Corre y se va!
-                </span>
-                <span className="text-[8px] text-white/80 leading-none mt-1 font-medium">
-                  {isHost ? "Presiona Iniciar" : "Esperando al anfitrión"}
-                </span>
+              /* BARAJA VOLTEADA (DORSO TRADICIONAL DE LA BARAJA MEXICANA CON EFECTO MAZO DE CARTAS) */
+              <div 
+                className="relative w-full h-full rounded-md overflow-hidden flex flex-col items-center justify-between p-1.5 text-center transition-all group"
+                style={{
+                  background: "linear-gradient(135deg, #7f1d1d 0%, #450a0a 45%, #2b0307 100%)",
+                  boxShadow: "2px 2px 0px #b45309, 4px 4px 0px #78350f, 6px 6px 0px #451a03, 0 8px 16px rgba(0,0,0,0.6)",
+                  border: "2px solid #f59e0b",
+                }}
+              >
+                {/* Filigree textured lattice watermark */}
+                <div 
+                  className="absolute inset-0 opacity-25 pointer-events-none"
+                  style={{
+                    backgroundImage: "radial-gradient(rgba(245, 158, 11, 0.4) 1px, transparent 1px)",
+                    backgroundSize: "6px 6px",
+                  }}
+                />
+
+                {/* Inner decorative golden border frame */}
+                <div className="absolute inset-1 border border-amber-400/40 rounded-sm pointer-events-none" />
+
+                {/* Top header */}
+                <div className="relative z-10 pt-0.5 pointer-events-none">
+                  <span className="text-[7.5px] font-black uppercase tracking-[0.2em] text-amber-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] block leading-none">
+                    LOTERÍA
+                  </span>
+                </div>
+
+                {/* Central Medallion with Garza Logo */}
+                <div className="relative z-10 w-11 h-11 rounded-full bg-black/60 border border-amber-400/80 p-1 flex items-center justify-center shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] pointer-events-none">
+                  <img 
+                    src={logoGarza} 
+                    alt="La Garza" 
+                    className="w-full h-full object-contain filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+                  />
+                </div>
+
+                {/* Bottom title & status */}
+                <div className="relative z-10 pb-0.5 pointer-events-none">
+                  <span className="text-[7px] font-extrabold uppercase tracking-[0.15em] text-amber-200/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] block leading-none">
+                    LA GARZA
+                  </span>
+                  <span className="text-[6.5px] font-black uppercase text-amber-400/90 tracking-wide block mt-0.5 leading-none animate-pulse">
+                    {isHost ? "▶ INICIAR" : "EN ESPERA"}
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -2248,23 +2222,59 @@ function JugarPage() {
         {/* MAIN BOTTOM BAR — SOLO VISIBLE PARA EL HOST */}
         {isHost && (
           <div className="bg-[color:var(--brand-navy)] px-4 py-3 flex items-center gap-3 shrink-0 z-30 border-t border-white/10 relative shadow-inner">
-            <div className="flex items-center gap-1.5 bg-white/10 px-3 py-2.5 rounded-full border border-white/20 shadow-sm shrink-0">
-              <TimerIcon className="w-4 h-4 text-white/80" />
-              <span className="font-extrabold text-sm text-white">{timeSecs}s</span>
+            
+            {/* Speed Selector Button (Segundero configurable por el host) */}
+            <div className="relative shrink-0">
+              {showSpeedMenu && (
+                <div 
+                  className="absolute bottom-full mb-3 left-0 bg-[color:var(--brand-navy-deep)]/95 border-2 border-amber-400/80 p-2 rounded-2xl shadow-2xl backdrop-blur-md z-50 flex items-center gap-1.5 animate-pop-in"
+                >
+                  <div className="text-[10px] font-black uppercase tracking-wider text-amber-300 px-1 border-r border-white/10 shrink-0">
+                    Segundos
+                  </div>
+                  {SPEED_OPTIONS.map((sec) => {
+                    const isSelected = timeSecs === sec;
+                    return (
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSetSpeed(sec);
+                        }}
+                        className={`w-9 h-9 rounded-xl font-black text-xs transition active:scale-90 flex items-center justify-center cursor-pointer ${
+                          isSelected
+                            ? "bg-amber-400 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.6)] ring-2 ring-white scale-105"
+                            : "bg-white/10 hover:bg-white/20 text-white border border-white/15"
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCycleSpeed}
+                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full border shadow-md shrink-0 transition active:scale-95 cursor-pointer ${
+                  showSpeedMenu
+                    ? "bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.5)]"
+                    : "bg-amber-400/15 hover:bg-amber-400/25 border-amber-400/40 text-amber-300"
+                }`}
+                title="Toca para cambiar los segundos de intervalo entre cartas"
+              >
+                <TimerIcon className="w-4 h-4 text-current" />
+                <span className="font-extrabold text-sm">{timeSecs}s</span>
+              </button>
             </div>
             
             <button
               type="button"
               onClick={() => {
                 if (drawnIdx < 0) {
-                  const newDeck = mesa?.deck && mesa.deck.length > 0 ? mesa.deck : shuffle(DECK.map((c) => c.n));
-                  update(ref(database, `mesas/${id}`), {
-                    status: "en-juego",
-                    serverPaused: false,
-                    deck: newDeck,
-                    drawnIdx: 0,
-                  }).catch(() => {});
-                  setPaused(false);
+                  handleStartGame();
                 } else {
                   const nextPaused = !paused;
                   setPaused(nextPaused);
@@ -2283,18 +2293,7 @@ function JugarPage() {
 
             <button 
               type="button"
-              onClick={() => {
-                if (isHost && drawnIdx < 0) {
-                  const newDeck = mesa?.deck && mesa.deck.length > 0 ? mesa.deck : shuffle(DECK.map((c) => c.n));
-                  update(ref(database, `mesas/${id}`), {
-                    status: "en-juego",
-                    serverPaused: false,
-                    deck: newDeck,
-                    drawnIdx: 0,
-                  }).catch(() => {});
-                  setPaused(false);
-                }
-              }}
+              onClick={handleStartGame}
               disabled={mesa?.status === "en-juego" && drawnIdx >= 0}
               className={`flex-1 text-[color:var(--brand-navy-deep)] font-extrabold py-3 rounded-full shadow-md text-sm sm:text-base tracking-wide transition-transform ${
                 mesa?.status === "en-juego" && drawnIdx >= 0
