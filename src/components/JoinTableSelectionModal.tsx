@@ -72,30 +72,12 @@ export function JoinTableSelectionModal({
   useEffect(() => {
     if (!open || !mesa) return;
 
-    let userTablas = loadUserTablas();
-    let matching = userTablas.filter((t) => t.size === roomSize);
-
-    // Auto-generate if user has 0 matching tables so they can play immediately
-    if (matching.length === 0) {
-      const initialTablas: Tabla[] = [];
-      const need = Math.max(2, limit);
-      for (let i = 0; i < need; i++) {
-        initialTablas.push({
-          id: Math.random().toString(36).substring(2, 9),
-          size: roomSize,
-          cards: generateRandomCards(roomSize),
-          createdAt: Date.now() + i,
-        });
-      }
-      userTablas = [...userTablas, ...initialTablas];
-      saveUserTablas(userTablas);
-      matching = initialTablas;
-    }
-
+    const userTablas = loadUserTablas();
+    const matching = userTablas.filter((t) => t.size === roomSize);
     setTablas(userTablas);
 
     // Determine initial count: check if user already had a saved selection for this mesa
-    let initialCount = Math.min(2, limit);
+    let initialCount = Math.min(Math.max(1, matching.length), limit);
     let initialSelected: string[] = [];
 
     try {
@@ -110,7 +92,7 @@ export function JoinTableSelectionModal({
       }
     } catch {}
 
-    if (initialSelected.length === 0) {
+    if (initialSelected.length === 0 && matching.length > 0) {
       // Pick first `initialCount` matching tables
       initialSelected = matching.slice(0, initialCount).map((t) => t.id);
     }
@@ -314,7 +296,29 @@ export function JoinTableSelectionModal({
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 pr-1 space-y-4 hide-scrollbar scroll-touch-y">
+        {matchingTablas.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto">
+            <div className="w-16 h-16 rounded-3xl bg-amber-400/20 text-amber-300 flex items-center justify-center border-2 border-amber-400/40 mb-3 shadow-lg">
+              <LayoutGrid className="w-8 h-8" />
+            </div>
+            <h3 className="text-base font-black text-white mb-1">¡No tienes barajas creadas!</h3>
+            <p className="text-xs text-white/60 mb-5 max-w-xs leading-relaxed">
+              Esta sala requiere barajas de tamaño <strong className="text-amber-300">{roomSize}</strong>. Para jugar debes crear primero tu baraja en &ldquo;Mis Barajas&rdquo;.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                navigate({ to: "/" });
+              }}
+              className="btn-gold px-6 py-3 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Crear Mi Primera Baraja</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex-1 pr-1 space-y-4 hide-scrollbar scroll-touch-y">
           {/* Step 1: Con cuántas tablas quieres jugar */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -446,49 +450,52 @@ export function JoinTableSelectionModal({
               className="w-full mt-2 py-2.5 px-3 rounded-2xl border border-dashed border-white/20 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-98"
             >
               <Plus className="w-4 h-4 text-amber-300" />
-              <span>Generar otra tabla nueva ({roomSize})</span>
+              <span>Crear otra tabla nueva ({roomSize})</span>
             </button>
           </div>
         </div>
+        )}
 
         {/* Footer Actions */}
-        <div className="mt-4 pt-3 border-t border-white/10 flex flex-col gap-2">
-          {/* Destination notice */}
-          <div className="text-center text-[11px] text-white/60">
-            {isGameInProgress ? (
-              <span className="text-purple-300 font-bold flex items-center justify-center gap-1.5 bg-purple-950/60 p-2 rounded-xl border border-purple-500/30">
-                <Play className="w-3.5 h-3.5 fill-current shrink-0" />
-                <span>Partida en curso — entrarás como <strong>Espectador</strong> y jugarás en la siguiente ronda</span>
-              </span>
-            ) : (
-              <span className="text-cyan-300 font-medium flex items-center justify-center gap-1">
-                <Clock className="w-3 h-3" />
-                La sala está en espera — ingresarás al lobby con los jugadores
-              </span>
-            )}
-          </div>
+        {matchingTablas.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-white/10 flex flex-col gap-2">
+            {/* Destination notice */}
+            <div className="text-center text-[11px] text-white/60">
+              {isGameInProgress ? (
+                <span className="text-purple-300 font-bold flex items-center justify-center gap-1.5 bg-purple-950/60 p-2 rounded-xl border border-purple-500/30">
+                  <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+                  <span>Partida en curso — entrarás como <strong>Espectador</strong> y jugarás en la siguiente ronda</span>
+                </span>
+              ) : (
+                <span className="text-cyan-300 font-medium flex items-center justify-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  La sala está en espera — ingresarás al lobby con los jugadores
+                </span>
+              )}
+            </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isJoining}
-              className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white/80 font-bold text-xs hover:bg-white/15 transition active:scale-95 disabled:opacity-50"
-            >
-              Cancelar
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isJoining}
+                className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white/80 font-bold text-xs hover:bg-white/15 transition active:scale-95 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
 
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={!isValidSelection || isJoining}
-              className="flex-[2] py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-[0_5px_20px_rgba(251,191,36,0.35)] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>{isGameInProgress ? "Entrar como Espectador" : "Entrar al Lobby"}</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={!isValidSelection || isJoining}
+                className="flex-[2] py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-[0_5px_20px_rgba(251,191,36,0.35)] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{isGameInProgress ? "Entrar como Espectador" : "Entrar al Lobby"}</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>,
     document.body

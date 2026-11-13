@@ -3,6 +3,9 @@ import { DECK, getCard } from "@/lib/deck";
 import { getThemedCard, getEquippedDeckSkin } from "@/lib/deckSkins";
 import { Plus, Trash2, CheckCircle, RefreshCcw, LayoutGrid, X, Pencil, ArrowLeft, Sparkles, Pointer, ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
+import { ref, update } from "firebase/database";
+import { database } from "@/lib/firebase";
+import { getCurrentUser, encodeEmailKey } from "@/lib/auth";
 
 type Size = "4x4" | "5x5";
 
@@ -29,6 +32,11 @@ function loadTablas(): Tabla[] {
 function saveTablas(list: Tabla[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    const user = getCurrentUser();
+    if (user && user.email) {
+      const key = encodeEmailKey(user.email);
+      update(ref(database, `users/${key}`), { tablas: list }).catch(() => {});
+    }
   } catch {
     /* ignore */
   }

@@ -18,6 +18,7 @@ import {
   Timer,
   Share2,
   CircleDot,
+  Plus,
   X,
   Calendar,
   Clock,
@@ -257,40 +258,17 @@ function MesaPage() {
     }
   }, [mesa?.id, myName, id, mesa?.host, mesa?.status, mesa?.drawnIdx, mesa?.winner, isHostInLobby]);
 
-  // Auto-generate boards for guest if they don't have matching boards
+  // Cargar tablas del jugador sin inventar barajas si no existen
   useEffect(() => {
     if (!mesa) return;
     const currentTablas = loadTablas();
     const matching = currentTablas.filter((t) => t.size === mesa.size);
-    const count = mesa.perPlayer || 2;
-    if (matching.length < count) {
-      const need = count - matching.length;
-      const generated: Tabla[] = [];
-      for (let i = 0; i < need; i++) {
-        generated.push({
-          id: Math.random().toString(36).substring(2, 9),
-          size: mesa.size,
-          cards: randomCards(mesa.size),
-          createdAt: Date.now() + i,
-        });
-      }
-      const updated = [...currentTablas, ...generated];
-      setTablas(updated);
-      try {
-        localStorage.setItem(TABLAS_KEY, JSON.stringify(updated));
-        const savedExisting = localStorage.getItem(`garza:selectedTablas:${id}`);
-        if (!savedExisting) {
-          localStorage.setItem(`garza:selectedTablas:${id}`, JSON.stringify(updated.slice(0, count).map((g) => g.id)));
-        }
-        window.dispatchEvent(new Event("garza:tablas-updated"));
-      } catch { }
-    } else {
-      try {
-        const savedExisting = localStorage.getItem(`garza:selectedTablas:${id}`);
-        if (!savedExisting && matching.length > 0) {
-          localStorage.setItem(`garza:selectedTablas:${id}`, JSON.stringify(matching.slice(0, count).map((g) => g.id)));
-        }
-      } catch { }
+    setTablas(currentTablas);
+
+    // Si tiene tablas pero aún no ha elegido con cuántas jugar, abrir selector
+    const savedExisting = localStorage.getItem(`garza:selectedTablas:${id}`);
+    if (!savedExisting && matching.length > 0) {
+      setIsChangingTablas(true);
     }
   }, [mesa?.size, mesa?.perPlayer, id]);
 
@@ -336,6 +314,11 @@ function MesaPage() {
 
   async function startGame() {
     if (!mesa) return;
+    if (mesaTablas.length === 0) {
+      alert("Aún no tienes barajas creadas para jugar. Por favor crea al menos una baraja primero.");
+      setIsChangingTablas(true);
+      return;
+    }
     try {
       const mesaRef = ref(database, `mesas/${id}`);
       const initialDeck = shuffleCards(DECK.map((c) => c.n));
@@ -826,50 +809,96 @@ function MesaPage() {
       {/* Change Tablas Modal */}
       {isChangingTablas && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl bg-[#140e2b] p-5 border border-white/20 text-white max-h-[85vh] flex flex-col">
-            <h3 className="text-base font-black text-white mb-1">Selecciona tus tablas</h3>
-            <p className="text-xs text-white/60 mb-3">
-              Elige hasta {mesa.perPlayer} {mesa.perPlayer === 1 ? "tabla" : "tablas"} ({tempSelectedTablas.length}/{mesa.perPlayer})
-            </p>
+          <div className="w-full max-w-sm rounded-3xl bg-[#140e2b] p-5 border border-white/20 text-white max-h-[85vh] flex flex-col shadow-2xl">
+            {tablas.filter((t) => t.size === mesa.size).length === 0 ? (
+              <div className="text-center py-6 flex flex-col items-center">
+                <div className="w-14 h-14 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center mx-auto mb-3 border border-amber-400/30">
+                  <LayoutGrid className="w-7 h-7" />
+                </div>
+                <h4 className="text-base font-black text-white mb-1">¡No tienes barajas creadas!</h4>
+                <p className="text-xs text-white/60 mb-5 max-w-xs leading-relaxed">
+                  Esta partida requiere barajas de tamaño <strong className="text-amber-300">{mesa.size}</strong>. Para jugar debes crear primero tu baraja en &ldquo;Mis Barajas&rdquo;.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/" })}
+                  className="btn-gold px-6 py-3 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Crear Mi Primera Baraja</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="mb-3">
+                  <h3 className="text-base font-black text-white leading-tight">¿Con cuántas barajas quieres jugar?</h3>
+                  <p className="text-xs text-white/60 mt-0.5">
+                    Elige cuántas barajas usarás ({tempSelectedTablas.length}/{mesa.perPlayer})
+                  </p>
+                </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {tablas
-                .filter((t) => t.size === mesa.size)
-                .map((t, idx) => {
-                  const isSelected = tempSelectedTablas.includes(t.id);
-                  return (
+                {/* Quick Count Selector */}
+                <div className="grid grid-cols-4 gap-1.5 mb-3">
+                  {Array.from({ length: Math.min(tablas.filter((t) => t.size === mesa.size).length, mesa.perPlayer || 2) }, (_, i) => i + 1).map((qty) => (
                     <button
-                      key={t.id}
+                      key={qty}
                       type="button"
-                      onClick={() => toggleTempTabla(t.id)}
-                      className={`w-full flex items-center justify-between p-3 rounded-2xl border text-xs font-bold transition ${isSelected
-                          ? "bg-amber-400/20 border-amber-400 text-amber-300"
-                          : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
-                        }`}
+                      onClick={() => {
+                        const matching = tablas.filter((t) => t.size === mesa.size);
+                        setTempSelectedTablas(matching.slice(0, qty).map((t) => t.id));
+                      }}
+                      className={`py-2 px-1 rounded-xl text-xs font-black border transition ${
+                        tempSelectedTablas.length === qty
+                          ? "bg-amber-400 text-slate-950 border-amber-300 shadow"
+                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                      }`}
                     >
-                      <span>Tabla {idx + 1} ({t.size})</span>
-                      {isSelected && <Check className="w-4 h-4 text-amber-400" />}
+                      {qty} {qty === 1 ? "Baraja" : "Barajas"}
                     </button>
-                  );
-                })}
-            </div>
+                  ))}
+                </div>
 
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIsChangingTablas(false)}
-                className="flex-1 py-2.5 rounded-xl bg-white/10 text-xs font-bold text-white"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={saveSelectedTablas}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs"
-              >
-                Guardar Selección
-              </button>
-            </div>
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                  {tablas
+                    .filter((t) => t.size === mesa.size)
+                    .map((t, idx) => {
+                      const isSelected = tempSelectedTablas.includes(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => toggleTempTabla(t.id)}
+                          className={`w-full flex items-center justify-between p-3 rounded-2xl border text-xs font-bold transition ${isSelected
+                              ? "bg-amber-400/20 border-amber-400 text-amber-300"
+                              : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
+                            }`}
+                        >
+                          <span>Baraja #{idx + 1} ({t.size})</span>
+                          {isSelected && <Check className="w-4 h-4 text-amber-400" />}
+                        </button>
+                      );
+                    })}
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsChangingTablas(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/20 transition"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveSelectedTablas}
+                    disabled={tempSelectedTablas.length === 0}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs disabled:opacity-50 transition"
+                  >
+                    Confirmar Barajas
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

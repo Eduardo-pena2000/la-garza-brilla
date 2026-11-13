@@ -18,7 +18,7 @@ import { AdInterstitialModal } from "@/components/AdInterstitialModal";
 import { getEquippedMarker, getOwnedItemIds } from "@/lib/loot";
 import { SPECIAL_STICKERS, SPECIAL_EMOJIS } from "@/lib/chests";
 import { getEquippedDeckSkin, getThemedCard, type ThemedCard } from "@/lib/deckSkins";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, encodeEmailKey } from "@/lib/auth";
 
 export const Route = createFileRoute("/mesa/$id/jugar")({
   component: JugarPage,
@@ -92,7 +92,7 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
-const SPEED_OPTIONS = [2, 3, 4, 5, 6, 8];
+const SPEED_OPTIONS = [2, 3, 4, 5, 6, 8, 10];
 
 function speedFor(mesa?: { speed?: number } | null): number {
   return (mesa?.speed && mesa.speed >= 1 ? mesa.speed : 4) * 1000;
@@ -157,6 +157,69 @@ function checkWin(mode: Mode, size: Size, cards: number[], isMarked: (c: number)
   return false;
 }
 
+function VictorySunburst() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-0">
+      {/* Outer 360 rotating golden sunburst */}
+      <div className="w-[850px] h-[850px] sm:w-[1100px] sm:h-[1100px] animate-sunburst opacity-40 shrink-0">
+        <svg viewBox="-250 -250 500 500" className="w-full h-full">
+          <defs>
+            <radialGradient id="victorySunburstGrad" cx="0" cy="0" r="250" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.85" />
+              <stop offset="35%" stopColor="#f59e0b" stopOpacity="0.45" />
+              <stop offset="75%" stopColor="#d97706" stopOpacity="0.12" />
+              <stop offset="100%" stopColor="#b45309" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          {Array.from({ length: 20 }).map((_, i) => {
+            const angleStep = 360 / 20;
+            const start = (i * angleStep * Math.PI) / 180;
+            const end = ((i * angleStep + angleStep / 2) * Math.PI) / 180;
+            const r = 260;
+            const x1 = Math.cos(start) * r;
+            const y1 = Math.sin(start) * r;
+            const x2 = Math.cos(end) * r;
+            const y2 = Math.sin(end) * r;
+            return (
+              <path
+                key={i}
+                d={`M 0 0 L ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)} Z`}
+                fill="url(#victorySunburstGrad)"
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Inner counter-rotating radiant rays */}
+      <div className="absolute w-[600px] h-[600px] sm:w-[850px] sm:h-[850px] animate-sunburst-reverse opacity-30 shrink-0">
+        <svg viewBox="-250 -250 500 500" className="w-full h-full">
+          {Array.from({ length: 16 }).map((_, i) => {
+            const angleStep = 360 / 16;
+            const start = (i * angleStep * Math.PI) / 180;
+            const end = ((i * angleStep + angleStep / 2) * Math.PI) / 180;
+            const r = 260;
+            const x1 = Math.cos(start) * r;
+            const y1 = Math.sin(start) * r;
+            const x2 = Math.cos(end) * r;
+            const y2 = Math.sin(end) * r;
+            return (
+              <path
+                key={i}
+                d={`M 0 0 L ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)} Z`}
+                fill="url(#victorySunburstGrad)"
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Radial golden glow */}
+      <div className="absolute w-96 h-96 rounded-full blur-3xl opacity-50 bg-amber-400 animate-pulse-halo" />
+    </div>
+  );
+}
+
 function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -188,6 +251,12 @@ function JugarPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       localStorage.setItem("garza:coins", coins.toString());
+      window.dispatchEvent(new Event("garza:coins-updated"));
+      const user = getCurrentUser();
+      if (user && user.email) {
+        const key = encodeEmailKey(user.email);
+        update(ref(database, `users/${key}`), { coins }).catch(() => {});
+      }
     }
   }, [coins]);
 
@@ -382,32 +451,15 @@ function JugarPage() {
           update(mesaRef, { deck: newDeck, drawnIdx: -1 });
         }
         
-        // Initialize boards if not loaded yet
+        // Initialize boards from user's created tablas without generating fake boards
         setTablasActivas(prev => {
           if (prev.length > 0) return prev;
           const remoteTablas = data.players?.[userName]?.tablas;
           if (remoteTablas && Array.isArray(remoteTablas) && remoteTablas.length > 0) {
             return remoteTablas;
           }
-          let allTablas = loadTablas().filter(t => t.size === data.size);
+          const allTablas = loadTablas().filter(t => t.size === data.size);
           const count = data.perPlayer || 2;
-          if (allTablas.length < count) {
-            const need = count - allTablas.length;
-            const generated: Tabla[] = [];
-            for (let i = 0; i < need; i++) {
-              generated.push({
-                id: Math.random().toString(36).substring(2, 9),
-                size: data.size,
-                cards: randomCards(data.size),
-                createdAt: Date.now() + i,
-              });
-            }
-            try {
-              const fullStored = loadTablas();
-              localStorage.setItem("garza:tablas", JSON.stringify([...fullStored, ...generated]));
-            } catch {}
-            allTablas = [...allTablas, ...generated];
-          }
           try {
             const savedSelected = localStorage.getItem(`garza:selectedTablas:${id}`);
             if (savedSelected) {
@@ -416,7 +468,7 @@ function JugarPage() {
               if (selected.length >= 1 && selected.length <= count) return selected;
             }
           } catch {}
-          return allTablas.slice(0, Math.min(2, count));
+          return allTablas.slice(0, Math.min(allTablas.length, count));
         });
 
       } else {
@@ -733,7 +785,14 @@ function JugarPage() {
     const hasWin = tablasActivas.some(t => checkWin(mesa.mode, t.size, t.cards, (c) => marked.has(`${t.id}-${c}`)));
     if (hasWin) {
       setWon(true);
-      const prize = mesa.prizePool || 0;
+      // Calcular premio entregado correctamente al ganador
+      let prize = mesa.prizePool || 0;
+      if (prize <= 0) {
+        const tableCost = mesa.cost || 10;
+        const totalTablesInGame = Object.values(mesa.players || {}).reduce((acc: number, p: any) => acc + (p.tablesCount || p.tablas?.length || 1), 0);
+        prize = Math.max(tableCost * tablasActivas.length, tableCost * (totalTablesInGame || 1));
+      }
+
       update(ref(database, `mesas/${id}`), {
         winner: {
           name: userName,
@@ -749,7 +808,17 @@ function JugarPage() {
       }).catch(() => {});
 
       if (prize > 0) {
-        setCoins(prev => prev + prize);
+        setCoins(prev => {
+          const nextCoins = prev + prize;
+          localStorage.setItem("garza:coins", nextCoins.toString());
+          window.dispatchEvent(new Event("garza:coins-updated"));
+          const user = getCurrentUser();
+          if (user && user.email) {
+            const key = encodeEmailKey(user.email);
+            update(ref(database, `users/${key}`), { coins: nextCoins }).catch(() => {});
+          }
+          return nextCoins;
+        });
       }
 
       if (isHost) setPaused(true);
@@ -1079,9 +1148,19 @@ function JugarPage() {
 
     setAwardedWinnerTimestamp(currentWinner.timestamp);
 
-    // Si el jugador local resultó ganador (por bot o al azar) y no ha cobrado
+    // Si el jugador local resultó ganador (por bot o al azar o sincronizado) y no ha cobrado
     if (currentWinner.name === userName && currentWinner.prize > 0 && !won) {
-      setCoins((prev) => prev + currentWinner.prize);
+      setCoins((prev) => {
+        const nextCoins = prev + currentWinner.prize;
+        localStorage.setItem("garza:coins", nextCoins.toString());
+        window.dispatchEvent(new Event("garza:coins-updated"));
+        const user = getCurrentUser();
+        if (user && user.email) {
+          const key = encodeEmailKey(user.email);
+          update(ref(database, `users/${key}`), { coins: nextCoins }).catch(() => {});
+        }
+        return nextCoins;
+      });
       if (settings.effects) new Audio("/audio/effects/winner.mp3").play().catch(() => {});
       if (settings.vibration && navigator.vibrate) navigator.vibrate([500, 200, 500]);
     } else if (currentWinner.name !== userName) {
@@ -1278,25 +1357,33 @@ function JugarPage() {
 
         {/* TABLA DE GANADORES Y RESUMEN DE LA RONDA CON CONTADOR AUTOMÁTICO */}
         {(won || Boolean(mesa?.winner)) && !winDismissed && (
-          <div className="absolute inset-0 z-50 bg-[color:var(--brand-navy-deep)]/90 flex items-center justify-center p-3 sm:p-4 backdrop-blur-md animate-fade-in">
-            {settings.confetti && <div className="absolute inset-0 pointer-events-none bg-[url('https://cdn-icons-png.flaticon.com/512/1795/1795325.png')] bg-[length:50px] animate-confetti-fall opacity-35" />}
+          <div className="absolute inset-0 z-50 bg-slate-950/85 flex items-center justify-center p-3 sm:p-4 backdrop-blur-md animate-fade-in overflow-hidden">
+            {/* Fondo de gloria de victoria (rayos dorados en 360 grados y destellos celestiales) */}
+            <VictorySunburst />
             
-            <div className="bg-gradient-to-b from-[color:var(--brand-navy)] via-[color:var(--brand-navy-deep)] to-slate-950 p-4 sm:p-5 rounded-3xl shadow-2xl border-2 border-[color:var(--brand-gold)] w-full max-w-md animate-modal-in relative z-10 flex flex-col gap-3 max-h-[92vh] overflow-hidden">
+            <div className="bg-gradient-to-b from-[#1c103e] via-[#100827] to-[#070312] p-4 sm:p-5 rounded-3xl shadow-[0_10px_50px_rgba(245,158,11,0.35)] border-2 border-amber-400 w-full max-w-md animate-modal-in relative z-10 flex flex-col gap-3 max-h-[92vh] overflow-hidden">
               
               {/* Header */}
               <div className="text-center shrink-0">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[10px] font-black uppercase tracking-wider mb-1">
-                  <Trophy className="w-3.5 h-3.5" />
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[10px] font-black uppercase tracking-wider mb-1 shadow-sm">
+                  <Trophy className="w-3.5 h-3.5 text-amber-400" />
                   <span>Resumen de la Ronda {mesa?.currentRound ? `#${mesa.currentRound}` : ""}</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-black text-[color:var(--brand-gold)] drop-shadow-md">
-                  {mesa?.winner?.reason === "random_finish" ? "¡Fin de Partida!" : "¡Lotería!"}
+                <h2 className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 bg-clip-text text-transparent drop-shadow-[0_2px_12px_rgba(245,158,11,0.5)] tracking-wide">
+                  {mesa?.winner?.reason === "random_finish" ? "¡Fin de Partida!" : "¡LOTERÍA!"}
                 </h2>
-                <p className="text-white/80 text-xs mt-0.5">
-                  Ganador: <strong className="text-[color:var(--brand-cyan)] font-extrabold">{mesa?.winner?.name || "Jugador"}</strong>
+                <p className="text-white/80 text-xs mt-1">
+                  Ganador: <strong className="text-amber-300 font-extrabold text-sm">{mesa?.winner?.name || "Jugador"}</strong>
                   {mesa?.winner?.isBot && <span className="text-amber-300 ml-1 font-bold">(🤖 Computadora)</span>}
                   {mesa?.winner?.reason === "random_finish" && <span className="block text-[11px] text-white/50 mt-0.5">Baraja agotada — Ganador asignado al azar</span>}
                 </p>
+                {/* Premio entregado al ganador */}
+                {mesa?.winner?.prize && mesa.winner.prize > 0 && (
+                  <div className="mt-2 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-xs shadow-[0_4px_15px_rgba(245,158,11,0.4)] animate-pop-in">
+                    <CoinAnimation className="w-4 h-4" />
+                    <span>Premio: +{mesa.winner.prize.toLocaleString()} monedas acreditadas</span>
+                  </div>
+                )}
               </div>
 
               {/* Leaderboard Table / Resumen de Ganadores */}
@@ -1689,25 +1776,9 @@ function JugarPage() {
                                   key={qty}
                                   type="button"
                                   onClick={() => {
-                                    let allTablas = loadTablas().filter(t => t.size === mesa.size);
-                                    if (allTablas.length < qty) {
-                                      const need = qty - allTablas.length;
-                                      const generated: Tabla[] = [];
-                                      for (let i = 0; i < need; i++) {
-                                        generated.push({
-                                          id: Math.random().toString(36).substring(2, 9),
-                                          size: mesa.size,
-                                          cards: randomCards(mesa.size),
-                                          createdAt: Date.now() + i,
-                                        });
-                                      }
-                                      try {
-                                        const full = loadTablas();
-                                        localStorage.setItem("garza:tablas", JSON.stringify([...full, ...generated]));
-                                      } catch {}
-                                      allTablas = [...allTablas, ...generated];
-                                    }
-                                    const picked = allTablas.slice(0, qty);
+                                    const allTablas = loadTablas().filter(t => t.size === mesa.size);
+                                    const picked = allTablas.slice(0, Math.min(qty, allTablas.length));
+                                    if (picked.length === 0) return;
                                     setTablasActivas(picked);
                                     setMarked(new Set());
                                     setActivePageIndex(0);
@@ -2358,44 +2429,51 @@ function JugarPage() {
             {/* Speed Selector Button (Segundero configurable por el host) */}
             <div className="relative shrink-0">
               {showSpeedMenu && (
-                <div 
-                  className="absolute bottom-full mb-3 left-0 bg-[color:var(--brand-navy-deep)]/95 border-2 border-amber-400/80 p-2 rounded-2xl shadow-2xl backdrop-blur-md z-50 flex items-center gap-1.5 animate-pop-in"
-                >
-                  <div className="text-[10px] font-black uppercase tracking-wider text-amber-300 px-1 border-r border-white/10 shrink-0">
-                    Segundos
+                <>
+                  <div 
+                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]" 
+                    onClick={() => setShowSpeedMenu(false)} 
+                  />
+                  <div 
+                    className="absolute bottom-full mb-3 left-0 bg-[#0f0a21]/95 border-2 border-amber-400 p-2 rounded-2xl shadow-2xl backdrop-blur-md z-50 flex items-center gap-1.5 animate-pop-in"
+                  >
+                    <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-amber-300 pr-1.5 border-r border-white/15 shrink-0">
+                      <TimerIcon className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Segundos:</span>
+                    </div>
+                    {SPEED_OPTIONS.map((sec) => {
+                      const isSelected = timeSecs === sec;
+                      return (
+                        <button
+                          key={sec}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetSpeed(sec);
+                          }}
+                          className={`w-9 h-9 rounded-xl font-black text-xs transition active:scale-90 flex items-center justify-center cursor-pointer ${
+                            isSelected
+                              ? "bg-amber-400 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.7)] ring-2 ring-white scale-105"
+                              : "bg-white/10 hover:bg-white/20 text-white border border-white/15"
+                          }`}
+                        >
+                          {sec}s
+                        </button>
+                      );
+                    })}
                   </div>
-                  {SPEED_OPTIONS.map((sec) => {
-                    const isSelected = timeSecs === sec;
-                    return (
-                      <button
-                        key={sec}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSetSpeed(sec);
-                        }}
-                        className={`w-9 h-9 rounded-xl font-black text-xs transition active:scale-90 flex items-center justify-center cursor-pointer ${
-                          isSelected
-                            ? "bg-amber-400 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.6)] ring-2 ring-white scale-105"
-                            : "bg-white/10 hover:bg-white/20 text-white border border-white/15"
-                        }`}
-                      >
-                        {sec}s
-                      </button>
-                    );
-                  })}
-                </div>
+                </>
               )}
 
               <button
                 type="button"
-                onClick={handleCycleSpeed}
+                onClick={() => setShowSpeedMenu(!showSpeedMenu)}
                 className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full border shadow-md shrink-0 transition active:scale-95 cursor-pointer ${
                   showSpeedMenu
                     ? "bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.5)]"
                     : "bg-amber-400/15 hover:bg-amber-400/25 border-amber-400/40 text-amber-300"
                 }`}
-                title="Toca para cambiar los segundos de intervalo entre cartas"
+                title="Toca para abrir el selector de segundos entre cartas"
               >
                 <TimerIcon className="w-4 h-4 text-current" />
                 <span className="font-extrabold text-sm">{timeSecs}s</span>

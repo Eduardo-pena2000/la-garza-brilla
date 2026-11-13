@@ -19,6 +19,7 @@ export interface UserAccount {
   equippedDeck: string;
   equippedWallpaper: string;
   equippedMarker: string;
+  tablas?: any[];
   authProvider?: "email" | "google" | "apple";
   createdAt: number;
   lastLogin: number;
@@ -129,6 +130,8 @@ export function clearGuestSession(): void {
     localStorage.removeItem("garza:name");
     localStorage.setItem("garza:coins", "0");
     localStorage.setItem("garza:vip", "false");
+    localStorage.removeItem("garza:tablas");
+    window.dispatchEvent(new Event("garza:tablas-updated"));
   } catch {}
 }
 
@@ -150,6 +153,10 @@ export function applyUserSession(user: UserAccount): void {
     if (user.equippedDeck) localStorage.setItem("garza:equipped_deck", user.equippedDeck);
     if (user.equippedWallpaper) localStorage.setItem("garza:equipped_wallpaper", user.equippedWallpaper);
     if (user.equippedMarker) localStorage.setItem("garza:equipped_marker", user.equippedMarker);
+    if (user.tablas && Array.isArray(user.tablas) && user.tablas.length > 0) {
+      localStorage.setItem("garza:tablas", JSON.stringify(user.tablas));
+      window.dispatchEvent(new Event("garza:tablas-updated"));
+    }
 
     window.dispatchEvent(new Event("garza:vip-updated"));
     window.dispatchEvent(new Event("garza:coins-updated"));
@@ -373,6 +380,8 @@ export function logoutUser(): void {
     localStorage.setItem("garza:name", "Invitado");
     localStorage.setItem("garza:coins", "0");
     localStorage.setItem("garza:vip", "false");
+    localStorage.removeItem("garza:tablas");
+    window.dispatchEvent(new Event("garza:tablas-updated"));
     window.dispatchEvent(new Event("garza:auth-updated"));
     window.dispatchEvent(new Event("garza:vip-updated"));
     window.dispatchEvent(new Event("garza:coins-updated"));
