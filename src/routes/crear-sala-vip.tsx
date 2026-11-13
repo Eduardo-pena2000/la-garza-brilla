@@ -62,7 +62,7 @@ interface RegisteredPlayer {
 }
 
 const MODES: { id: Mode; label: string; hint: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "normal", label: "Normal", hint: "Tabla completa o línea", icon: Trophy },
+  { id: "normal", label: "Normal", hint: "Tradicional: línea, cuadro chico, 4 esquinas o llena", icon: Trophy },
   { id: "pozo", label: "Pozo", hint: "Centro de la tabla", icon: CircleDot },
   { id: "esquinas", label: "4 Esquinas", hint: "Las 4 esquinas", icon: LayoutGrid },
   { id: "sieteLoco", label: "7 Loco", hint: "7 cartas marcadas", icon: Zap },

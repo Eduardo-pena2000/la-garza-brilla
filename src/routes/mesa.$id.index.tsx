@@ -111,7 +111,7 @@ const MESAS_KEY = "garza:mesas";
 const TABLAS_KEY = "garza:tablas";
 
 const MODE_META: Record<Mode, { label: string; hint: string; icon: React.ComponentType<{ className?: string }> }> = {
-  normal: { label: "Normal", hint: "Llena la tabla o línea", icon: Trophy },
+  normal: { label: "Normal", hint: "Línea, cuadro chico, 4 esquinas o llena", icon: Trophy },
   pozo: { label: "Pozo", hint: "Grupo al centro", icon: CircleDot },
   esquinas: { label: "4 Esquinas", hint: "Las cuatro esquinas", icon: LayoutGrid },
   sieteLoco: { label: "7 Loco", hint: "Patrón de 7 cartas", icon: Zap },

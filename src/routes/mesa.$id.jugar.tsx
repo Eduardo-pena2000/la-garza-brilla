@@ -4,7 +4,7 @@ import {
   ArrowLeft, Pause, Play, Settings2, MessageCircle, Users, RotateCcw,
   Timer as TimerIcon, Heart, Image as ImageIcon, Triangle, X, Send,
   Menu, Info, Trophy, Link as LinkIcon, Edit2, Share2, LayoutGrid, Check, CircleDot, Zap, Crown, ShieldCheck,
-  ChevronLeft, ChevronRight, Sparkles, ChevronUp
+  ChevronLeft, ChevronRight, Sparkles, ChevronUp, History
 } from "lucide-react";
 import logoGarza from "@/assets/logo-garza.png";
 import { DECK, getCard } from "@/lib/deck";
@@ -99,7 +99,7 @@ function speedFor(mesa?: { speed?: number } | null): number {
 }
 
 const MODE_META: Record<Mode, { label: string; hint: string; icon: React.ComponentType<{ className?: string }> }> = {
-  normal: { label: "Normal", hint: "Llena la tabla o línea", icon: Trophy },
+  normal: { label: "Normal", hint: "Línea, cuadro chico, 4 esquinas o llena", icon: Trophy },
   pozo: { label: "Pozo", hint: "Grupo al centro", icon: CircleDot },
   esquinas: { label: "4 Esquinas", hint: "Las cuatro esquinas", icon: LayoutGrid },
   sieteLoco: { label: "7 Loco", hint: "Patrón de 7 cartas", icon: Zap },
@@ -111,11 +111,31 @@ function checkWin(mode: Mode, size: Size, cards: number[], isMarked: (c: number)
   const grid = Array.from({ length: n }, (_, r) => cards.slice(r * n, (r + 1) * n));
 
   if (mode === "normal") {
+    // 1. Tabla llena (todas las cartas)
     if (cards.every(isMarked)) return true;
+
+    // 2. Líneas horizontales (cualquier fila)
     for (let r = 0; r < n; r++) if (grid[r].every(isMarked)) return true;
+
+    // 3. Líneas verticales (cualquier columna / chorro)
     for (let c = 0; c < n; c++) if (grid.every((row) => isMarked(row[c]))) return true;
+
+    // 4. Diagonales (ambas esquinas cruzadas)
     if (grid.every((row, i) => isMarked(row[i]))) return true;
     if (grid.every((row, i) => isMarked(row[n - 1 - i]))) return true;
+
+    // 5. Cuatro esquinas tradicionales
+    if ([grid[0][0], grid[0][n - 1], grid[n - 1][0], grid[n - 1][n - 1]].every(isMarked)) return true;
+
+    // 6. Cuadro chico (cualquier bloque contiguo 2x2 en la tabla, ej. centro o esquinas)
+    for (let r = 0; r < n - 1; r++) {
+      for (let c = 0; c < n - 1; c++) {
+        if ([grid[r][c], grid[r][c + 1], grid[r + 1][c], grid[r + 1][c + 1]].every(isMarked)) {
+          return true;
+        }
+      }
+    }
+
     return false;
   }
   if (mode === "pozo") {
@@ -661,6 +681,34 @@ function JugarPage() {
   }, [currentCard, drawnIdx, settings.audio, settings.voice]);
 
   const drawn = drawnIdx >= 0 ? getThemedCard(deck[drawnIdx], deckSkin.id) : null;
+
+  // Historial de todas las cartas voceadas en la partida actual
+  const calledCards = useMemo(() => {
+    if (drawnIdx < 0 || !deck || deck.length === 0) return [];
+    const list: ThemedCard[] = [];
+    const count = Math.min(drawnIdx + 1, deck.length);
+    for (let i = 0; i < count; i++) {
+      const card = getThemedCard(deck[i], deckSkin.id);
+      if (card) list.push(card);
+    }
+    return list;
+  }, [deck, drawnIdx, deckSkin.id]);
+
+  const historyScrollRef = useRef<HTMLDivElement>(null);
+  const [previewHistoryCard, setPreviewHistoryCard] = useState<ThemedCard | null>(null);
+
+  // Auto-scroll del historial para mantener siempre a la vista la última carta voceada
+  useEffect(() => {
+    if (historyScrollRef.current) {
+      const el = historyScrollRef.current;
+      requestAnimationFrame(() => {
+        el.scrollTo({
+          left: el.scrollWidth,
+          behavior: "smooth",
+        });
+      });
+    }
+  }, [drawnIdx]);
 
   useEffect(() => {
     if (drawnIdx === -1) {
@@ -1898,6 +1946,90 @@ function JugarPage() {
             </span>
           </div>
         )}
+
+        {/* HISTORIAL DE CARTAS VOCEADAS (DESFILE SUPERIOR DE CARTAS QUE YA SALIERON) */}
+        <section
+          aria-label="Historial de cartas voceadas"
+          className="w-full max-w-[800px] mx-auto px-3 pt-1.5 pb-0.5 z-20 shrink-0 relative"
+        >
+          <div className="flex items-center gap-2 bg-black/45 border border-white/10 rounded-2xl px-2.5 py-1.5 backdrop-blur-md shadow-md relative">
+            {/* Badge contador de cartas voceadas */}
+            <div
+              className="flex items-center gap-1.5 shrink-0 pr-2 border-r border-white/15 text-[10px] font-bold text-amber-300"
+              title="Total de cartas voceadas en esta partida"
+            >
+              <History className="w-3.5 h-3.5 text-amber-400" />
+              <span className="font-black text-xs text-amber-400">{calledCards.length}</span>
+              <span className="text-white/50 text-[9px] uppercase tracking-wider hidden xs:inline">Voceadas</span>
+            </div>
+
+            {/* Preview flotante al tocar una carta */}
+            {previewHistoryCard && (
+              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-30 px-3 py-1 bg-slate-900/95 border border-amber-400/60 rounded-full shadow-2xl text-[11px] font-black text-amber-300 backdrop-blur animate-fade-in pointer-events-none flex items-center gap-1.5 whitespace-nowrap">
+                <span>Carta #{previewHistoryCard.n}:</span>
+                <span className="text-white">{previewHistoryCard.name}</span>
+              </div>
+            )}
+
+            {/* Tira / carrusel horizontal de cartas que van desfilando */}
+            {calledCards.length > 0 ? (
+              <div
+                ref={historyScrollRef}
+                className="flex-1 flex items-center gap-1.5 overflow-x-auto hide-scrollbar scroll-smooth py-0.5"
+              >
+                {calledCards.map((card, idx) => {
+                  const isLatest = idx === calledCards.length - 1;
+                  return (
+                    <button
+                      key={`${card.n}-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        setPreviewHistoryCard(card);
+                        setTimeout(() => {
+                          setPreviewHistoryCard((prev) => (prev?.n === card.n ? null : prev));
+                        }, 2500);
+                      }}
+                      className={`relative shrink-0 rounded-[3px] overflow-hidden transition-all duration-300 cursor-pointer ${
+                        isLatest
+                          ? "w-[34px] sm:w-[38px] h-[50px] sm:h-[56px] border-2 border-amber-400 ring-2 ring-amber-400/50 scale-105 shadow-[0_0_12px_rgba(245,158,11,0.7)] z-10 animate-pop-in"
+                          : "w-[30px] sm:w-[34px] h-[44px] sm:h-[50px] border border-white/40 opacity-85 hover:opacity-100 hover:border-white hover:scale-105"
+                      } bg-white shadow-sm flex flex-col justify-between`}
+                      title={`#${card.n} ${card.name}`}
+                    >
+                      <img
+                        src={card.image}
+                        alt={card.name}
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => {
+                          if (card.fallbackImage && e.currentTarget.src !== card.fallbackImage) {
+                            e.currentTarget.src = card.fallbackImage;
+                          }
+                        }}
+                        className="w-full h-full object-fill pointer-events-none select-none"
+                      />
+                      {/* Número de la carta en la esquina superior */}
+                      <span className="absolute top-0 right-0 px-1 py-0.2 bg-black/80 text-[7.5px] font-black text-white leading-none rounded-bl-sm pointer-events-none">
+                        {card.n}
+                      </span>
+                      {/* Badge 'Última' para la más reciente */}
+                      {isLatest && (
+                        <span className="absolute bottom-0 inset-x-0 bg-amber-500 text-[6.5px] font-black text-black text-center uppercase tracking-tighter leading-none py-0.5 pointer-events-none">
+                          Última
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex-1 text-[10px] text-white/40 italic py-1 flex items-center gap-1.5">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400/40 animate-ping" />
+                <span>Las cartas voceadas desfilarán aquí conforme salgan...</span>
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* TOP DASHBOARD: CHAT ARRIBA A LA IZQUIERDA | BARAJA A VOCEAR ARRIBA A LA DERECHA */}
         <section aria-label="Panel de juego" className="w-full max-w-[800px] mx-auto px-3 pt-2 pb-1 grid grid-cols-[1fr_auto] gap-2.5 shrink-0 z-20">

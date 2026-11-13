@@ -77,7 +77,7 @@ function randomCards(size: Size): number[] {
 const STEPS = ["Nombre", "Modo", "Tablas", "Acceso", "Elegir"] as const;
 
 const MODES: { id: Mode; label: string; hint: string; icon: React.ComponentType<{ className?: string }>; gradient: string }[] = [
-  { id: "normal", label: "Normal", hint: "Llena toda la tabla, o línea, columna, fila o diagonal.", icon: Trophy, gradient: "var(--gradient-card-cyan)" },
+  { id: "normal", label: "Normal", hint: "Tradicional: línea, cuadro chico, 4 esquinas o llena.", icon: Trophy, gradient: "var(--gradient-card-cyan)" },
   { id: "pozo", label: "Pozo", hint: "Grupo de cartas en el centro de la tabla.", icon: CircleDot, gradient: "var(--gradient-card-pink)" },
   { id: "esquinas", label: "4 Esquinas", hint: "Las 4 esquinas de la tabla.", icon: LayoutGrid, gradient: "var(--gradient-card-gold)" },
   { id: "sieteLoco", label: "7 Loco", hint: "Siete cartas específicas en la tabla.", icon: Zap, gradient: "var(--gradient-card-teal)" },
