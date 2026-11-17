@@ -829,8 +829,9 @@ function JugarPage() {
 
   function toggleMark(tablaId: string, card: number) {
     if (won || mesa?.winner || isSpectator) return;
-    const currentDrawnCard = deck[drawnIdx];
-    if (currentDrawnCard !== card) return; // Sólo marcar si es la carta actual
+    // Permitir marcar cualquier carta que ya haya sido voceada/salido en la partida
+    const drawnCards = deck.slice(0, drawnIdx + 1);
+    if (!drawnCards.includes(card)) return; // Sólo marcar si ya ha salido
 
     setMarked((prev) => {
       const markKey = `${tablaId}-${card}`;
@@ -1828,7 +1829,7 @@ function JugarPage() {
                                     }
                                   }
                                 }}
-                                className={`relative flex flex-col items-center rounded-3xl p-3 ring-1 transition-all ${!isGameStarted && 'active:scale-[0.98]'} ${isGameStarted ? 'opacity-50 cursor-not-allowed' : ''} ${
+                                className={`relative flex flex-col items-center rounded-none border border-white/20 p-3 ring-1 transition-all ${!isGameStarted && 'active:scale-[0.98]'} ${isGameStarted ? 'opacity-50 cursor-not-allowed' : ''} ${
                                   isActiva
                                     ? "bg-[color:var(--brand-cyan)]/10 ring-[color:var(--brand-cyan)] shadow-[0_0_15px_rgba(0,255,255,0.2)] scale-[1.02]"
                                     : "bg-white/5 ring-white/10 hover:bg-white/10"
@@ -1839,7 +1840,7 @@ function JugarPage() {
                                     Tabla {idx + 1}
                                   </span>
                                   <div
-                                    className={`grid h-5 w-5 place-items-center rounded-full border ${
+                                    className={`grid h-5 w-5 place-items-center rounded-none border ${
                                       isActiva
                                         ? "border-[color:var(--brand-cyan)] bg-[color:var(--brand-cyan)] text-[color:var(--brand-navy-deep)]"
                                         : "border-white/20 bg-black/20"
@@ -1855,7 +1856,7 @@ function JugarPage() {
                                   {t.cards.map((c, i) => {
                                     const card = getThemedCard(c, deckSkin.id);
                                     return (
-                                      <div key={i} className="relative aspect-[3/4] ring-1 ring-white/10">
+                                      <div key={i} className="relative aspect-[3/4] ring-1 ring-white/10 rounded-none overflow-hidden">
                                         <img
                                           src={card?.image}
                                           alt={card?.name ?? `Carta ${c}`}
@@ -1865,7 +1866,7 @@ function JugarPage() {
                                               e.currentTarget.src = card.fallbackImage;
                                             }
                                           }}
-                                          className="h-full w-full object-cover"
+                                          className="h-full w-full object-cover rounded-none"
                                         />
                                       </div>
                                     );
@@ -2023,7 +2024,7 @@ function JugarPage() {
           aria-label="Historial de cartas voceadas"
           className="w-full max-w-[800px] mx-auto px-3 pt-1.5 pb-0.5 z-20 shrink-0 relative"
         >
-          <div className="flex items-center gap-2 bg-black/45 border border-white/10 rounded-2xl px-2.5 py-1.5 backdrop-blur-md shadow-md relative">
+          <div className="flex items-center gap-2 bg-black/45 border border-white/10 rounded-none px-2.5 py-1.5 backdrop-blur-md shadow-md relative">
             {/* Badge contador de cartas voceadas */}
             <div
               className="flex items-center gap-1.5 shrink-0 pr-2 border-r border-white/15 text-[10px] font-bold text-amber-300"
@@ -2036,7 +2037,7 @@ function JugarPage() {
 
             {/* Preview flotante al tocar una carta */}
             {previewHistoryCard && (
-              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-30 px-3 py-1 bg-slate-900/95 border border-amber-400/60 rounded-full shadow-2xl text-[11px] font-black text-amber-300 backdrop-blur animate-fade-in pointer-events-none flex items-center gap-1.5 whitespace-nowrap">
+              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-30 px-3 py-1 bg-slate-900/95 border border-amber-400/60 rounded-none shadow-2xl text-[11px] font-black text-amber-300 backdrop-blur animate-fade-in pointer-events-none flex items-center gap-1.5 whitespace-nowrap">
                 <span>Carta #{previewHistoryCard.n}:</span>
                 <span className="text-white">{previewHistoryCard.name}</span>
               </div>
@@ -2059,13 +2060,19 @@ function JugarPage() {
                         setTimeout(() => {
                           setPreviewHistoryCard((prev) => (prev?.n === card.n ? null : prev));
                         }, 2500);
+                        // Auto-marcar en las tablas activas si tienen esta carta del historial
+                        tablasActivas.forEach((t) => {
+                          if (t.cards.includes(card.n)) {
+                            toggleMark(t.id, card.n);
+                          }
+                        });
                       }}
-                      className={`relative shrink-0 rounded-[3px] overflow-hidden transition-all duration-300 cursor-pointer ${
+                      className={`relative shrink-0 rounded-none overflow-hidden transition-all duration-300 cursor-pointer ${
                         isLatest
                           ? "w-[34px] sm:w-[38px] h-[50px] sm:h-[56px] border-2 border-amber-400 ring-2 ring-amber-400/50 scale-105 shadow-[0_0_12px_rgba(245,158,11,0.7)] z-10 animate-pop-in"
                           : "w-[30px] sm:w-[34px] h-[44px] sm:h-[50px] border border-white/40 opacity-85 hover:opacity-100 hover:border-white hover:scale-105"
                       } bg-white shadow-sm flex flex-col justify-between`}
-                      title={`#${card.n} ${card.name}`}
+                      title={`#${card.n} ${card.name} (Toca para marcar)`}
                     >
                       <img
                         src={card.image}
@@ -2077,15 +2084,11 @@ function JugarPage() {
                             e.currentTarget.src = card.fallbackImage;
                           }
                         }}
-                        className="w-full h-full object-fill pointer-events-none select-none"
+                        className="w-full h-full object-fill pointer-events-none select-none rounded-none"
                       />
-                      {/* Número de la carta en la esquina superior */}
-                      <span className="absolute top-0 right-0 px-1 py-0.2 bg-black/80 text-[7.5px] font-black text-white leading-none rounded-bl-sm pointer-events-none">
-                        {card.n}
-                      </span>
                       {/* Badge 'Última' para la más reciente */}
                       {isLatest && (
-                        <span className="absolute bottom-0 inset-x-0 bg-amber-500 text-[6.5px] font-black text-black text-center uppercase tracking-tighter leading-none py-0.5 pointer-events-none">
+                        <span className="absolute bottom-0 inset-x-0 bg-amber-500 text-[6.5px] font-black text-black text-center uppercase tracking-tighter leading-none py-0.5 pointer-events-none rounded-none">
                           Última
                         </span>
                       )}
@@ -2184,7 +2187,7 @@ function JugarPage() {
             title={drawnIdx < 0 && isHost ? "Toca para iniciar partida (¡Corre y se va!)" : undefined}
           >
             {drawn ? (
-              <div className="relative w-full h-full overflow-hidden border-2 border-amber-400 bg-gradient-to-b from-[#1d123d] via-[#120a2a] to-[#0a0518] shadow-[0_4px_20px_rgba(245,158,11,0.25)] rounded-sm">
+              <div className="relative w-full h-full overflow-hidden border-2 border-amber-400 bg-gradient-to-b from-[#1d123d] via-[#120a2a] to-[#0a0518] shadow-[0_4px_20px_rgba(245,158,11,0.25)] rounded-none">
                 <img 
                   src={drawn.image} 
                   alt={drawn.name} 
@@ -2194,10 +2197,10 @@ function JugarPage() {
                       e.currentTarget.src = drawn.fallbackImage;
                     }
                   }}
-                  className="w-full h-full object-fill animate-pop-in" 
+                  className="w-full h-full object-fill animate-pop-in rounded-none" 
                 />
                 {drawn.mascot && (
-                  <span className="absolute top-0.5 right-0.5 px-1.5 py-0.5 rounded-full bg-black/75 border border-white/20 text-[10px] shadow-md z-10 animate-pop-in">
+                  <span className="absolute top-0.5 right-0.5 px-1.5 py-0.5 rounded-none bg-black/75 border border-white/20 text-[10px] shadow-md z-10 animate-pop-in">
                     {drawn.mascot}
                   </span>
                 )}
@@ -2205,7 +2208,7 @@ function JugarPage() {
             ) : (
               /* BARAJA VOLTEADA (DORSO TRADICIONAL DE LA BARAJA MEXICANA CON EFECTO MAZO DE CARTAS) */
               <div 
-                className="relative w-full h-full rounded-md overflow-hidden flex flex-col items-center justify-between p-1.5 text-center transition-all group"
+                className="relative w-full h-full rounded-none overflow-hidden flex flex-col items-center justify-between p-1.5 text-center transition-all group"
                 style={{
                   background: "linear-gradient(135deg, #7f1d1d 0%, #450a0a 45%, #2b0307 100%)",
                   boxShadow: "2px 2px 0px #b45309, 4px 4px 0px #78350f, 6px 6px 0px #451a03, 0 8px 16px rgba(0,0,0,0.6)",
@@ -2222,7 +2225,7 @@ function JugarPage() {
                 />
 
                 {/* Inner decorative golden border frame */}
-                <div className="absolute inset-1 border border-amber-400/40 rounded-sm pointer-events-none" />
+                <div className="absolute inset-1 border border-amber-400/40 rounded-none pointer-events-none" />
 
                 {/* Top header */}
                 <div className="relative z-10 pt-0.5 pointer-events-none">
@@ -2325,10 +2328,10 @@ function JugarPage() {
                    {pageTablas.map((tablaItem) => (
                      <div
                        key={tablaItem.id}
-                       className="bg-white/10 p-1.5 sm:p-2 shadow-2xl backdrop-blur-md w-full max-w-[360px] h-fit border-2 border-white/20 relative"
+                       className="bg-white/10 p-1.5 sm:p-2 shadow-2xl backdrop-blur-md w-full max-w-[360px] h-fit border-2 border-white/20 relative rounded-none"
                      >
                        <div
-                         className="grid gap-[2px] bg-white/20 border-2 border-white/10 overflow-hidden mt-0.5"
+                         className="grid gap-[2px] bg-white/20 border-2 border-white/10 overflow-hidden mt-0.5 rounded-none"
                          style={{ gridTemplateColumns: `repeat(${tablaItem.size === "4x4" ? 4 : 5}, minmax(0, 1fr))` }}
                        >
                          {tablaItem.cards.map((c, idx) => {
@@ -2343,7 +2346,7 @@ function JugarPage() {
                                onPointerMove={(e) => handlePointerMove(e, tablaItem.id, c)}
                                onPointerUp={(e) => handlePointerUp(e, tablaItem.id, c)}
                                onPointerCancel={(e) => handlePointerUp(e, tablaItem.id, c)}
-                               className="relative aspect-[1/1.55] bg-white w-full overflow-hidden active:scale-95 transition-transform touch-none select-none"
+                               className="relative aspect-[1/1.55] bg-white w-full overflow-hidden active:scale-95 transition-transform touch-none select-none rounded-none"
                              >
                                <img
                                  src={card?.image}
@@ -2354,7 +2357,7 @@ function JugarPage() {
                                      e.currentTarget.src = card.fallbackImage;
                                    }
                                  }}
-                                 className="w-full h-full object-fill pointer-events-none"
+                                 className="w-full h-full object-fill pointer-events-none rounded-none"
                                  draggable={false}
                                />
                                {isMarked && (

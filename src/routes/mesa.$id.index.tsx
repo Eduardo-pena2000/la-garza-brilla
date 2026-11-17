@@ -722,7 +722,7 @@ function MesaPage() {
             {mesaTablas.map((t, i) => (
               <div
                 key={t.id}
-                className="relative overflow-hidden rounded-2xl bg-white/5 p-3 ring-1 ring-white/10"
+                className="relative overflow-hidden rounded-none border-2 border-white/20 bg-white/5 p-3 ring-1 ring-white/10"
               >
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-white/50">
@@ -815,9 +815,9 @@ function MesaPage() {
                 <div className="w-14 h-14 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center mx-auto mb-3 border border-amber-400/30">
                   <LayoutGrid className="w-7 h-7" />
                 </div>
-                <h4 className="text-base font-black text-white mb-1">¡No tienes barajas creadas!</h4>
+                <h4 className="text-base font-black text-white mb-1">¡No tienes tablas creadas!</h4>
                 <p className="text-xs text-white/60 mb-5 max-w-xs leading-relaxed">
-                  Esta partida requiere barajas de tamaño <strong className="text-amber-300">{mesa.size}</strong>. Para jugar debes crear primero tu baraja en &ldquo;Mis Barajas&rdquo;.
+                  Esta partida requiere tablas de tamaño <strong className="text-amber-300">{mesa.size}</strong>. Para jugar debes crear primero tu tabla en &ldquo;Mis Tablas&rdquo;.
                 </p>
                 <button
                   type="button"
@@ -825,15 +825,15 @@ function MesaPage() {
                   className="btn-gold px-6 py-3 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Crear Mi Primera Baraja</span>
+                  <span>Crear Mi Primera Tabla</span>
                 </button>
               </div>
             ) : (
               <>
                 <div className="mb-3">
-                  <h3 className="text-base font-black text-white leading-tight">¿Con cuántas barajas quieres jugar?</h3>
+                  <h3 className="text-base font-black text-white leading-tight">¿Con cuántas tablas quieres jugar?</h3>
                   <p className="text-xs text-white/60 mt-0.5">
-                    Elige cuántas barajas usarás ({tempSelectedTablas.length}/{mesa.perPlayer})
+                    Elige cuántas tablas usarás ({tempSelectedTablas.length}/{mesa.perPlayer})
                   </p>
                 </div>
 
@@ -853,7 +853,7 @@ function MesaPage() {
                           : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
                       }`}
                     >
-                      {qty} {qty === 1 ? "Baraja" : "Barajas"}
+                      {qty} {qty === 1 ? "Tabla" : "Tablas"}
                     </button>
                   ))}
                 </div>
@@ -868,12 +868,12 @@ function MesaPage() {
                           key={t.id}
                           type="button"
                           onClick={() => toggleTempTabla(t.id)}
-                          className={`w-full flex items-center justify-between p-3 rounded-2xl border text-xs font-bold transition ${isSelected
+                          className={`w-full flex items-center justify-between p-3 rounded-none border text-xs font-bold transition ${isSelected
                               ? "bg-amber-400/20 border-amber-400 text-amber-300"
                               : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
                             }`}
                         >
-                          <span>Baraja #{idx + 1} ({t.size})</span>
+                          <span>Tabla #{idx + 1} ({t.size})</span>
                           {isSelected && <Check className="w-4 h-4 text-amber-400" />}
                         </button>
                       );
@@ -894,7 +894,7 @@ function MesaPage() {
                     disabled={tempSelectedTablas.length === 0}
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs disabled:opacity-50 transition"
                   >
-                    Confirmar Barajas
+                    Confirmar Tablas
                   </button>
                 </div>
               </>
@@ -916,7 +916,7 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
       {cards.map((c, i) => {
         const card = getThemedCard(c);
         return (
-          <div key={i} className="relative aspect-[3/4] overflow-hidden rounded ring-1 ring-white/10">
+          <div key={i} className="relative aspect-[3/4] overflow-hidden rounded-none ring-1 ring-white/10">
             {card ? (
               <img
                 src={card.image}
@@ -927,7 +927,7 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
                     e.currentTarget.src = card.fallbackImage;
                   }
                 }}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover rounded-none"
               />
             ) : (
               <div className="grid h-full w-full place-items-center bg-white/10 text-[8px] text-white/50">

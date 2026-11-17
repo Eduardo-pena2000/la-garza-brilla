@@ -21,6 +21,51 @@ import { CoinAnimation } from "@/components/CoinAnimation";
 import { ChestOpeningModal } from "@/components/ChestOpeningModal";
 import { DailyRouletteModal, getRouletteCooldown } from "@/components/DailyRouletteModal";
 import { CHESTS, openChest, type ChestConfig, type RewardItem } from "@/lib/chests";
+import { getThemedCard } from "@/lib/deckSkins";
+
+function MiniTablaThumb() {
+  const [cards, setCards] = useState<number[]>([1, 3, 8, 11]);
+
+  useEffect(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem("garza:tablas") : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].cards?.length >= 4) {
+          setCards(parsed[0].cards.slice(0, 4));
+          return;
+        }
+      }
+      setCards([1, 3, 8, 11]);
+    } catch {
+      setCards([1, 3, 8, 11]);
+    }
+  }, []);
+
+  return (
+    <div className="size-14 bg-[#fef3c7] p-0.5 border-2 border-amber-400 shadow-md grid grid-cols-2 gap-0.5 rounded-none overflow-hidden shrink-0">
+      {cards.map((n, i) => {
+        const c = getThemedCard(n);
+        return (
+          <div key={`${n}-${i}`} className="relative aspect-[1/1.55] bg-white overflow-hidden rounded-none border border-black/10">
+            {c?.image ? (
+              <img
+                src={c.image}
+                alt={c.name}
+                className="w-full h-full object-fill pointer-events-none select-none rounded-none"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-[7px] font-black text-slate-800">
+                {n}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function InicioView({ 
   onNavigateTienda, 
@@ -150,10 +195,10 @@ export function InicioView({
   }, [showRouletteModal]);
 
   const features = [
-    { img: null, title: "Crear mesa", desc: "Inicia tu propia partida", onClick: () => navigate({ to: "/abrir-mesa" }) },
-    { img: featureJoin, title: "Unirse a mesa", desc: "Entra a una mesa con código", onClick: () => navigate({ to: "/unirse" }) },
-    { img: featureDecks, title: "Mis barajas", desc: "Administra tus barajas", onClick: onNavigateTablas },
-    { img: featureShop, title: "Tienda", desc: "Compra monedas, barajas y más", onClick: onNavigateTienda },
+    { img: null, isTablaThumb: false, title: "Crear mesa", desc: "Inicia tu propia partida", onClick: () => navigate({ to: "/abrir-mesa" }) },
+    { img: featureJoin, isTablaThumb: false, title: "Unirse a mesa", desc: "Entra a una mesa con código", onClick: () => navigate({ to: "/unirse" }) },
+    { img: null, isTablaThumb: true, title: "Mis tablas", desc: "Administra tus tablas", onClick: onNavigateTablas },
+    { img: featureShop, isTablaThumb: false, title: "Tienda", desc: "Compra monedas, tablas y más", onClick: onNavigateTienda },
   ];
 
   // Reclamar recompensas de cofre abierto en el menú de inicio
@@ -504,7 +549,7 @@ export function InicioView({
       {/* Features */}
       <section className={`mt-4 grid grid-cols-4 gap-2 px-4 relative shrink-0 ${isTutorial ? "z-50" : "z-20"}`}>
         {features.map((f) => {
-          const isTarget = isTutorial && f.title === "Mis barajas";
+          const isTarget = isTutorial && (f.title === "Mis tablas" || f.title === "Mis barajas");
           return (
             <div key={f.title} className={`relative ${isTarget ? "z-50" : ""}`}>
               {isTarget && (
@@ -522,7 +567,9 @@ export function InicioView({
                   isTarget ? "ring-4 ring-[color:var(--brand-cyan)] scale-105 shadow-[0_0_25px_rgba(0,255,255,0.6)] animate-pulse" : ""
                 } ${isTutorial && !isTarget ? "opacity-30 pointer-events-none" : "hover:scale-105 active:scale-95 transition"}`}
               >
-                {f.img ? (
+                {f.isTablaThumb ? (
+                  <MiniTablaThumb />
+                ) : f.img ? (
                   <img
                     src={f.img}
                     alt=""

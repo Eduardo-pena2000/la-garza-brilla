@@ -57,7 +57,7 @@ function MainTabsLayout() {
   const bottomTabs = [
     { label: "Inicio", Icon: Home, index: 0, action: () => scrollToTab(0) },
     { label: "Jugar", Icon: Gamepad2, index: 1, action: () => scrollToTab(1) },
-    { label: "Barajas", Icon: Layers, index: 2, action: () => scrollToTab(2) },
+    { label: "Tablas", Icon: Layers, index: 2, action: () => scrollToTab(2) },
     { label: "Tienda", Icon: ShoppingCart, index: 3, action: () => scrollToTab(3) },
     { label: "Perfil", Icon: User, index: 4, action: () => scrollToTab(4) },
   ];

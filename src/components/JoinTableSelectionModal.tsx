@@ -301,9 +301,9 @@ export function JoinTableSelectionModal({
             <div className="w-16 h-16 rounded-3xl bg-amber-400/20 text-amber-300 flex items-center justify-center border-2 border-amber-400/40 mb-3 shadow-lg">
               <LayoutGrid className="w-8 h-8" />
             </div>
-            <h3 className="text-base font-black text-white mb-1">¡No tienes barajas creadas!</h3>
+            <h3 className="text-base font-black text-white mb-1">¡No tienes tablas creadas!</h3>
             <p className="text-xs text-white/60 mb-5 max-w-xs leading-relaxed">
-              Esta sala requiere barajas de tamaño <strong className="text-amber-300">{roomSize}</strong>. Para jugar debes crear primero tu baraja en &ldquo;Mis Barajas&rdquo;.
+              Esta sala requiere tablas de tamaño <strong className="text-amber-300">{roomSize}</strong>. Para jugar debes crear primero tu tabla en &ldquo;Mis Tablas&rdquo;.
             </p>
             <button
               type="button"
@@ -314,7 +314,7 @@ export function JoinTableSelectionModal({
               className="btn-gold px-6 py-3 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Crear Mi Primera Baraja</span>
+              <span>Crear Mi Primera Tabla</span>
             </button>
           </div>
         ) : (
@@ -384,7 +384,7 @@ export function JoinTableSelectionModal({
                     key={t.id}
                     type="button"
                     onClick={() => handleToggleTabla(t.id)}
-                    className={`relative p-3 rounded-2xl border text-left transition-all active:scale-98 flex flex-col justify-between overflow-hidden group ${
+                    className={`relative p-3 rounded-none border-2 text-left transition-all active:scale-98 flex flex-col justify-between overflow-hidden group ${
                       isSelected
                         ? "bg-amber-400/15 border-amber-400/80 shadow-[0_0_15px_rgba(251,191,36,0.2)]"
                         : "bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10"
@@ -394,7 +394,7 @@ export function JoinTableSelectionModal({
                       <span className="text-xs font-black text-white">
                         Tabla #{index + 1}
                       </span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                      <div className={`w-5 h-5 rounded-none flex items-center justify-center transition-all ${
                         isSelected
                           ? "bg-amber-400 text-slate-950 shadow-sm"
                           : "border border-white/30 text-transparent"
@@ -404,13 +404,13 @@ export function JoinTableSelectionModal({
                     </div>
 
                     {/* Mini board preview (2x2 cards sample) */}
-                    <div className="grid grid-cols-2 gap-1 w-full bg-black/40 p-1.5 rounded-xl border border-white/5">
+                    <div className="grid grid-cols-2 gap-1 w-full bg-black/40 p-1.5 rounded-none border border-white/5">
                       {previewCards.map((cn, ci) => {
                         const card = getThemedCard(cn);
                         return (
                           <div
                             key={ci}
-                            className="aspect-[3/4] rounded-lg overflow-hidden relative bg-white/5 border border-white/10"
+                            className="aspect-[3/4] rounded-none overflow-hidden relative bg-white/5 border border-white/10"
                           >
                             {card?.image ? (
                               <img
@@ -422,7 +422,7 @@ export function JoinTableSelectionModal({
                                     e.currentTarget.src = card.fallbackImage;
                                   }
                                 }}
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-cover rounded-none"
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-[8px] font-bold text-white/40">

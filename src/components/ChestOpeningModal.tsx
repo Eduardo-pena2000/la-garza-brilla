@@ -596,7 +596,7 @@ export function ChestOpeningModal({
             {currentReward.type === "card" && currentReward.image && (
               <div className="flex flex-col items-center my-1">
                 <div
-                  className={`w-36 sm:w-44 aspect-[3/4] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.95)] relative bg-black/40 border-2 transition-all ${
+                  className={`w-36 sm:w-44 aspect-[3/4] rounded-none overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.95)] relative bg-black/40 border-2 transition-all ${
                     isLegendary
                       ? "border-cyan-300 shadow-[0_0_35px_rgba(6,182,212,0.7)]"
                       : isEpic
@@ -725,7 +725,7 @@ export function ChestOpeningModal({
 
                           {/* 3D Lotería Card with Holographic Sheen */}
                           <div
-                            className={`w-24 sm:w-28 aspect-[3/4] rounded-2xl overflow-hidden shadow-[0_15px_30px_rgba(0,0,0,0.9)] relative bg-black/60 border-2 transition-transform duration-300 group-hover:scale-105 ${
+                            className={`w-24 sm:w-28 aspect-[3/4] rounded-none overflow-hidden shadow-[0_15px_30px_rgba(0,0,0,0.9)] relative bg-black/60 border-2 transition-transform duration-300 group-hover:scale-105 ${
                               isLegendary
                                 ? "border-cyan-300 shadow-[0_0_25px_rgba(6,182,212,0.8)]"
                                 : isEpic

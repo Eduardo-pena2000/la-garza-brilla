@@ -734,7 +734,7 @@ function StepSelectTablas({
                 key={t.id}
                 type="button"
                 onClick={() => onToggle(t.id)}
-                className={`relative overflow-hidden rounded-2xl p-2 text-left ring-1 transition ${
+                className={`relative overflow-hidden rounded-none border-2 border-white/30 p-2 text-left ring-1 transition ${
                   active
                     ? "ring-[color:var(--brand-cyan)] shadow-[0_18px_32px_-12px_rgba(0,0,0,0.55)]"
                     : "ring-white/20 bg-white/95 hover:-translate-y-0.5"
@@ -771,7 +771,7 @@ function MiniGrid({ cards, size }: { cards: number[]; size: Size }) {
       {cards.map((n, i) => {
         const card = getThemedCard(n);
         return (
-          <div key={i} className="relative aspect-[3/4]">
+          <div key={i} className="relative aspect-[3/4] rounded-none overflow-hidden">
             <img
               src={card?.image}
               alt={card?.name ?? `Carta ${n}`}
@@ -781,7 +781,7 @@ function MiniGrid({ cards, size }: { cards: number[]; size: Size }) {
                   e.currentTarget.src = card.fallbackImage;
                 }
               }}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover rounded-none"
             />
           </div>
         );

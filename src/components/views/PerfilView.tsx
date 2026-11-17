@@ -653,7 +653,7 @@ export function PerfilView({ onNavigateTienda }: { onNavigateTienda?: () => void
                           e.currentTarget.src = equippedDeck.sampleCardImage;
                         }
                       }}
-                      className="h-full w-auto aspect-[2/3] object-cover rounded shadow"
+                      className="h-full w-auto aspect-[2/3] object-cover rounded-none shadow"
                     />
                   ) : (
                     <span className="text-2xl drop-shadow">{equippedDeck.icon}</span>
@@ -771,7 +771,7 @@ export function PerfilView({ onNavigateTienda }: { onNavigateTienda?: () => void
                                 e.currentTarget.src = deck.sampleCardImage;
                               }
                             }}
-                            className="h-full w-auto aspect-[2/3] object-cover rounded-lg shadow-md border border-white/20 group-hover:scale-110 transition-transform"
+                            className="h-full w-auto aspect-[2/3] object-cover rounded-none shadow-md border border-white/20 group-hover:scale-110 transition-transform"
                           />
                         </div>
                       ) : (
@@ -1577,7 +1577,7 @@ export function PerfilView({ onNavigateTienda }: { onNavigateTienda?: () => void
                               e.currentTarget.src = inspectedCard.fallbackImage;
                             }
                           }}
-                          className="w-32 sm:w-36 aspect-[2/3] object-cover rounded-xl border-2 shadow-2xl relative z-10 transition-transform group-hover:scale-105"
+                          className="w-32 sm:w-36 aspect-[2/3] object-cover rounded-none border-2 shadow-2xl relative z-10 transition-transform group-hover:scale-105"
                           style={{ borderColor: inspectItem.deckConfig.accentColor }}
                         />
                         <div className="mt-2 flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/80 border border-white/20 z-20">

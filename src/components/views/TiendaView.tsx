@@ -606,7 +606,7 @@ export function TiendaView({ onBack }: { onBack?: () => void }) {
                       {deck.previewImages.map((img, i) => (
                         <div
                           key={i}
-                          className="w-10 h-14 rounded-lg overflow-hidden border border-white/30 shadow-md bg-black/60 transform transition-transform hover:scale-110"
+                          className="w-10 h-14 rounded-none overflow-hidden border border-white/30 shadow-md bg-black/60 transform transition-transform hover:scale-110"
                           style={{
                             transform: `rotate(${(i - 1) * 8}deg) translateY(${i === 1 ? -2 : 0}px)`,
                             zIndex: i === 1 ? 2 : 1,

@@ -162,7 +162,7 @@ export function TablasView({ onBack, navigateToMenu }: { onBack?: () => void, na
                 key={t.id}
                 type="button"
                 onClick={() => setSelected(t.id)}
-                className="group relative overflow-hidden rounded-2xl bg-white/95 p-2 text-left shadow-[var(--shadow-card)] ring-1 ring-white/30 transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_32px_-12px_rgba(0,0,0,0.55)] active:scale-[0.98] animate-slide-up-soft"
+                className="group relative overflow-hidden rounded-none border-2 border-white/40 bg-white/95 p-2 text-left shadow-[var(--shadow-card)] ring-1 ring-white/30 transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_32px_-12px_rgba(0,0,0,0.55)] active:scale-[0.98] animate-slide-up-soft"
                 style={{ animationDelay: `${0.05 * idx}s` }}
               >
                 <TablaPreview cards={t.cards} size={t.size} />
@@ -316,7 +316,7 @@ function TablaPreview({ cards, size }: { cards: number[]; size: Size }) {
 function CardTile({ n }: { n: number }) {
   const card = getThemedCard(n);
   return (
-    <div className="relative aspect-[1/1.55] bg-amber-50 rounded-[2px] overflow-hidden">
+    <div className="relative aspect-[1/1.55] bg-amber-50 rounded-none overflow-hidden">
       <img
         src={card?.image}
         alt={card?.name ?? `Carta ${n}`}
@@ -326,7 +326,7 @@ function CardTile({ n }: { n: number }) {
             e.currentTarget.src = card.fallbackImage;
           }
         }}
-        className="h-full w-full object-fill drop-shadow-sm"
+        className="h-full w-full object-fill drop-shadow-sm rounded-none"
       />
     </div>
   );
@@ -485,7 +485,7 @@ function CustomTablaModal({ onClose, onSave, initialCards = [] }: { onClose: () 
             <button 
               key={i} 
               onClick={() => setActiveSlot(i)}
-              className={`aspect-[1/1.55] transition-all relative group flex items-center justify-center ${cardNum ? 'bg-white/5 border border-white/10' : 'bg-black/30 border-2 border-dashed border-white/20 hover:border-white/50 active:scale-95'}`}
+              className={`aspect-[1/1.55] rounded-none transition-all relative group flex items-center justify-center ${cardNum ? 'bg-white/5 border border-white/10' : 'bg-black/30 border-2 border-dashed border-white/20 hover:border-white/50 active:scale-95'}`}
             >
               {cardNum ? (
                 <>
@@ -521,7 +521,7 @@ function CustomTablaModal({ onClose, onSave, initialCards = [] }: { onClose: () 
                   <button 
                     key={c.n} 
                     onClick={() => handleCardPick(c.n)} 
-                    className={`relative aspect-[1/1.55] transition-all active:scale-95 ${isUsed ? 'opacity-30 grayscale' : 'hover:ring-2 hover:ring-white/50'}`}
+                    className={`relative aspect-[1/1.55] rounded-none transition-all active:scale-95 ${isUsed ? 'opacity-30 grayscale' : 'hover:ring-2 hover:ring-white/50'}`}
                   >
                     <CardTile n={c.n} />
                     {isUsed && <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-[1px]"><CheckCircle className="w-8 h-8 text-white/50" /></div>}

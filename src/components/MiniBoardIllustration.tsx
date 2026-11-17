@@ -17,13 +17,13 @@ export const MiniBoardIllustration: FC<{ mode: Mode; active: boolean }> = ({ mod
   };
 
   return (
-    <div className={`grid grid-cols-4 gap-[2px] p-1.5 rounded-lg border shadow-sm ${active ? 'bg-white/20 border-white/40' : 'bg-[color:var(--brand-navy-deep)]/40 border-white/10'}`}>
+    <div className={`grid grid-cols-4 gap-[2px] p-1.5 rounded-none border shadow-sm ${active ? 'bg-white/20 border-white/40' : 'bg-[color:var(--brand-navy-deep)]/40 border-white/10'}`}>
       {Array.from({ length: 16 }).map((_, i) => {
         const r = Math.floor(i / 4);
         const c = i % 4;
         const marked = mode === "sieteLoco" ? isMarkedSieteLoco(r, c) : isMarked(r, c);
         return (
-          <div key={i} className={`w-2.5 h-[14px] rounded-[2px] transition-colors ${marked ? (active ? 'bg-white shadow-[0_0_5px_rgba(255,255,255,0.8)]' : 'bg-white/80') : (active ? 'bg-white/10' : 'bg-white/5')}`} />
+          <div key={i} className={`w-2.5 h-[14px] rounded-none transition-colors ${marked ? (active ? 'bg-white shadow-[0_0_5px_rgba(255,255,255,0.8)]' : 'bg-white/80') : (active ? 'bg-white/10' : 'bg-white/5')}`} />
         );
       })}
     </div>
