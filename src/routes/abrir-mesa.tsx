@@ -466,15 +466,13 @@ function StepMode({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void 
 }
 
 function StepTablas({
-  size,
-  onSize,
   perPlayer,
   onPerPlayer,
   cost,
   onCost,
 }: {
-  size: Size;
-  onSize: (s: Size) => void;
+  size?: Size;
+  onSize?: (s: Size) => void;
   perPlayer: number;
   onPerPlayer: (n: number) => void;
   cost: number;
@@ -482,21 +480,7 @@ function StepTablas({
 }) {
   return (
     <div className="animate-slide-up-soft">
-      <SectionTitle icon={LayoutGrid} title="Tablas por jugador" hint="Tamaño de la tabla y cuántas repartir." />
-
-      <div className="mt-4 relative flex h-12 items-center rounded-full bg-white/10 p-1 ring-1 ring-white/15 backdrop-blur">
-        <span
-          aria-hidden
-          className="absolute top-1 bottom-1 left-1 right-1 rounded-full transition-all duration-300"
-          style={{
-            background: "var(--gradient-brand)",
-            boxShadow: "0 8px 20px -8px rgba(0,0,0,0.5)",
-          }}
-        />
-        <div className="relative z-10 flex-1 text-center text-sm font-bold text-white">
-          4x4 (16 cartas)
-        </div>
-      </div>
+      <SectionTitle icon={LayoutGrid} title="Tablas por jugador" hint="Configura cuántas tablas repartir y costo por tabla." />
 
       <div className="mt-6 rounded-3xl bg-white/5 p-5 ring-1 ring-white/10">
         <div className="flex items-baseline justify-between">
